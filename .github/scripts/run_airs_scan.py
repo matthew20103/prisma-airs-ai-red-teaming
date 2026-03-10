@@ -38,7 +38,12 @@ def manage_target(headers):
         "name": TARGET_NAME,
         "connection_params": {
             "api_endpoint": MODEL_ENDPOINT,
-            "request_json": {"prompt": "{INPUT}"} # Update this to your app's required JSON
+            "request_json": {
+                "prompt": "{INPUT}"
+            },
+            "response_json": {
+                "reply": "{RESPONSE}" 
+            }
         }
     }
 
