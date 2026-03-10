@@ -1,0 +1,39 @@
+name: Prisma AIRS AI Red Teaming
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: 
+
+jobs:
+  run-ai-security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Execute AI Red Teaming Scan
+        env:
+          PRISMA_CLIENT_ID: ${{ secrets.PRISMA_CLIENT_ID }}
+          PRISMA_CLIENT_SECRET: ${{ secrets.PRISMA_CLIENT_SECRET }}
+          PRISMA_TSG_ID: ${{ secrets.PRISMA_TSG_ID }}
+          MODEL_ENDPOINT: "https://my-lab-app.internal/api/chat" 
+        run: python .github/scripts/run_airs_scan.py
+
+      - name: Upload Scan Report Artifact
+        if: always() 
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-security-report
+          path: airs_report.json
