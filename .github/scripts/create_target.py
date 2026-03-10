@@ -8,17 +8,24 @@ CLIENT_ID = os.environ.get("PRISMA_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("PRISMA_CLIENT_SECRET")
 TSG_ID = os.environ.get("PRISMA_TSG_ID")
 
-# Required Variables
+# Root Variables
 TARGET_NAME = os.environ.get("TARGET_NAME")
-MODEL_ENDPOINT = os.environ.get("MODEL_ENDPOINT")
-REQUEST_JSON = json.loads(os.environ.get("REQUEST_JSON", "{}"))
-RESPONSE_JSON = json.loads(os.environ.get("RESPONSE_JSON", "{}"))
-
-# Optional Variables
 DESCRIPTION = os.environ.get("DESCRIPTION", "").strip()
 TARGET_TYPE = os.environ.get("TARGET_TYPE", "").strip()
 CONNECTION_TYPE = os.environ.get("CONNECTION_TYPE", "").strip()
 API_ENDPOINT_TYPE = os.environ.get("API_ENDPOINT_TYPE", "").strip()
+
+# Connection Params Variables
+MODEL_ENDPOINT = os.environ.get("MODEL_ENDPOINT")
+REQUEST_JSON = json.loads(os.environ.get("REQUEST_JSON", "{}"))
+RESPONSE_JSON = json.loads(os.environ.get("RESPONSE_JSON", "{}"))
+REQUEST_HEADERS = json.loads(os.environ.get("REQUEST_HEADERS", '{"Content-Type": "application/json"}'))
+RESPONSE_KEY = os.environ.get("RESPONSE_KEY", "").strip()
+
+# Multi-Turn Config Variables
+MULTI_TURN_TYPE = os.environ.get("MULTI_TURN_TYPE", "none").strip()
+MULTI_TURN_REQ_ID = os.environ.get("MULTI_TURN_REQ_ID", "").strip()
+MULTI_TURN_RESP_ID = os.environ.get("MULTI_TURN_RESP_ID", "").strip()
 
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
 MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/mgmt-plane/v1"
@@ -32,39 +39,44 @@ def get_access_token():
 def main():
     headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
 
-    # 1. Build the dynamic payload
-    target_payload = {
-        "name": TARGET_NAME,
-        "connection_params": {
-            "api_endpoint": MODEL_ENDPOINT,
-            "request_json": REQUEST_JSON,
-            "response_json": RESPONSE_JSON,
-            # Adding standard headers required by many AI apps
-            "request_headers": {
-                "Content-Type": "application/json"
-            }
-        }
+    # 1. Build the Connection Params
+    connection_params = {
+        "api_endpoint": MODEL_ENDPOINT,
+        "request_json": REQUEST_JSON,
+        "response_json": RESPONSE_JSON,
+        "request_headers": REQUEST_HEADERS
     }
 
-    # Inject optional fields only if they were provided in the GitHub Action UI
-    if DESCRIPTION:
-        target_payload["description"] = DESCRIPTION
-    if TARGET_TYPE:
-        target_payload["target_type"] = TARGET_TYPE
-    if CONNECTION_TYPE:
-        target_payload["connection_type"] = CONNECTION_TYPE
-    if API_ENDPOINT_TYPE:
-        target_payload["api_endpoint_type"] = API_ENDPOINT_TYPE
+    if RESPONSE_KEY:
+        connection_params["response_key"] = RESPONSE_KEY
 
-    # 2. Check for existing Target
+    # Build multi-turn config if the user selected stateful or stateless
+    if MULTI_TURN_TYPE in ["stateful", "stateless"]:
+        connection_params["multi_turn_config"] = {
+            "type": MULTI_TURN_TYPE,
+            "request_id_field": MULTI_TURN_REQ_ID,
+            "response_id_field": MULTI_TURN_RESP_ID
+        }
+
+    # 2. Build the Root Payload
+    target_payload = {
+        "name": TARGET_NAME,
+        "connection_params": connection_params
+    }
+
+    if DESCRIPTION: target_payload["description"] = DESCRIPTION
+    if TARGET_TYPE: target_payload["target_type"] = TARGET_TYPE
+    if CONNECTION_TYPE: target_payload["connection_type"] = CONNECTION_TYPE
+    if API_ENDPOINT_TYPE: target_payload["api_endpoint_type"] = API_ENDPOINT_TYPE
+
+    # 3. Check for existing Target
     list_resp = requests.get(f"{MGMT_BASE_URL}/target", headers=headers)
     existing_targets = list_resp.json().get("data", [])
     target_id = next((t.get("id") for t in existing_targets if t.get("name") == TARGET_NAME), None)
 
-    # Adding the validate query parameter as shown in the API doc screenshot
     query_params = {"validate": "true"}
 
-    # 3. Create or Update
+    # 4. Create or Update
     if target_id:
         print(f"Updating existing target: {TARGET_NAME} ({target_id})")
         resp = requests.put(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers, json=target_payload, params=query_params)
@@ -79,9 +91,8 @@ def main():
     target_id = target_id or resp.json().get("id")
     print(f"Target is ready! ID: {target_id}")
 
-    # 4. Profiling Check
+    # 5. Profiling Check
     print("Triggering and checking profiling status...")
-    # Attempt to trigger profiling, but gracefully ignore if it says Access Denied / already running
     probe_resp = requests.post(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
     if not probe_resp.ok:
         print(f"Note on profiling trigger: {probe_resp.text}")
