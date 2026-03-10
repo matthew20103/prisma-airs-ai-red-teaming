@@ -3,7 +3,6 @@ name: Prisma AIRS AI Red Teaming
 on:
   push:
     branches: [ "main" ]
-  # This adds the manual trigger with dynamic input fields in the GitHub UI!
   workflow_dispatch:
     inputs:
       target_name:
@@ -43,16 +42,18 @@ jobs:
 
       - name: Execute AI Red Teaming Scan
         env:
-          PRISMA_CLIENT_ID: ${{ secrets.PRISMA_CLIENT_ID }}
-          PRISMA_CLIENT_SECRET: ${{ secrets.PRISMA_CLIENT_SECRET }}
-          PRISMA_TSG_ID: ${{ secrets.PRISMA_TSG_ID }}
+          # Double quotes protect the curly braces from confusing the YAML parser
+          PRISMA_CLIENT_ID: "${{ secrets.PRISMA_CLIENT_ID }}"
+          PRISMA_CLIENT_SECRET: "${{ secrets.PRISMA_CLIENT_SECRET }}"
+          PRISMA_TSG_ID: "${{ secrets.PRISMA_TSG_ID }}"
+          TARGET_NAME: "${{ inputs.target_name || 'Production-AI-Agent' }}"
+          MODEL_ENDPOINT: "${{ inputs.api_endpoint || 'https://mock-ai-app.example.com/api/chat' }}"
           
-          # Map the user inputs down to the Python Script. 
-          # The '||' acts as a fallback if the workflow is triggered by a code push instead of manual dispatch.
-          TARGET_NAME: ${{ github.event.inputs.target_name || 'Production-AI-Agent' }}
-          MODEL_ENDPOINT: ${{ github.event.inputs.api_endpoint || 'https://mock-ai-app.example.com/api/chat' }}
-          REQUEST_JSON: ${{ github.event.inputs.request_json || '{"prompt": "{INPUT}"}' }}
-          RESPONSE_JSON: ${{ github.event.inputs.response_json || '{"reply": "{RESPONSE}"}' }}
+          # The pipe '|' tells YAML to read the JSON exactly as-is without breaking
+          REQUEST_JSON: |
+            ${{ inputs.request_json || '{"prompt": "{INPUT}"}' }}
+          RESPONSE_JSON: |
+            ${{ inputs.response_json || '{"reply": "{RESPONSE}"}' }}
           
         run: python .github/scripts/run_airs_scan.py
 
