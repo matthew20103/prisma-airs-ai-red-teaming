@@ -11,7 +11,10 @@ TSG_ID = os.environ.get("PRISMA_TSG_ID")
 MODEL_ENDPOINT = os.environ.get("MODEL_ENDPOINT")
 
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
-BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming"
+
+# UPDATED: Split Base URLs according to the documentation
+MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/management-plane"
+DATA_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/data-plane"
 
 def get_access_token():
     print("Generating OAuth 2.0 Access Token...")
@@ -19,13 +22,9 @@ def get_access_token():
         "grant_type": "client_credentials",
         "scope": f"tsg_id:{TSG_ID}"
     }
-    
-    # Palo Alto Networks requires Basic Auth for token generation
     resp = requests.post(AUTH_URL, data=payload, auth=(CLIENT_ID, CLIENT_SECRET))
     resp.raise_for_status()
-    
-    token = resp.json().get("access_token")
-    return token
+    return resp.json().get("access_token")
 
 def main():
     print(f"Starting AI Red Teaming scan for target: {MODEL_ENDPOINT}")
@@ -38,24 +37,38 @@ def main():
     }
 
     # 2. Create a Scan Target (Management Plane API)
+    print("Creating scan target...")
     target_payload = {"endpoint": MODEL_ENDPOINT, "name": "CI-CD-Lab-Target"}
-    target_resp = requests.post(f"{BASE_URL}/v1/target", headers=headers, json=target_payload)
+    target_resp = requests.post(f"{MGMT_BASE_URL}/v1/target", headers=headers, json=target_payload)
     target_resp.raise_for_status()
-    target_id = target_resp.json().get("id")
+    # Assuming the API returns 'id' or 'uuid', adjust if the Target API docs specify otherwise
+    target_id = target_resp.json().get("id") or target_resp.json().get("uuid") 
+    print(f"Target created with ID: {target_id}")
 
-    # 3. Trigger the Scan (Data Plane API)
-    scan_payload = {"target_id": target_id, "scan_type": "automated"}
-    scan_resp = requests.post(f"{BASE_URL}/v1/scan", headers=headers, json=scan_payload)
+    # 3. Trigger the Scan (Data Plane API) - UPDATED PAYLOAD
+    print("Triggering the scan...")
+    scan_payload = {
+        "name": "GitHub-Actions-Scan",
+        "target": {
+            "uuid": target_id,
+            "version": 0
+        },
+        "job_type": "DYNAMIC",
+        "job_metadata": {}
+    }
+    scan_resp = requests.post(f"{DATA_BASE_URL}/v1/scan", headers=headers, json=scan_payload)
     scan_resp.raise_for_status()
-    job_id = scan_resp.json().get("job_id")
+    # The response likely returns job_id or uuid for the scan
+    job_id = scan_resp.json().get("job_id") or scan_resp.json().get("id")
     print(f"Scan triggered successfully. Job ID: {job_id}")
 
-    # 4. Poll for Scan Completion
+    # 4. Poll for Scan Completion (Data Plane API)
     status = "PENDING"
     while status in ["PENDING", "IN_PROGRESS"]:
         time.sleep(15) 
-        poll_resp = requests.get(f"{BASE_URL}/v1/scan/{job_id}", headers=headers)
-        status = poll_resp.json().get("status")
+        poll_resp = requests.get(f"{DATA_BASE_URL}/v1/scan/{job_id}", headers=headers)
+        poll_resp.raise_for_status()
+        status = poll_resp.json().get("status", "IN_PROGRESS")
         print(f"Current scan status: {status}")
 
     if status in ["FAILED", "ABORTED"]:
@@ -64,7 +77,8 @@ def main():
 
     # 5. Fetch the Report (Data Plane API)
     print("Scan completed. Fetching report...")
-    report_resp = requests.get(f"{BASE_URL}/v1/report/dynamic/{job_id}/report", headers=headers)
+    report_resp = requests.get(f"{DATA_BASE_URL}/v1/report/dynamic/{job_id}/report", headers=headers)
+    report_resp.raise_for_status()
     report_data = report_resp.json()
 
     with open("airs_report.json", "w") as f:
