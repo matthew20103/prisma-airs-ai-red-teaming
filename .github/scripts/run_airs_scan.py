@@ -12,9 +12,9 @@ MODEL_ENDPOINT = os.environ.get("MODEL_ENDPOINT")
 
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
 
-# UPDATED: Split Base URLs according to the documentation
-MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/management-plane"
-DATA_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/data-plane"
+# UPDATED: Split base URLs for Management vs Data planes
+MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/mgmt-plane/v1"
+DATA_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/data-plane/v1"
 
 def get_access_token():
     print("Generating OAuth 2.0 Access Token...")
@@ -36,49 +36,51 @@ def main():
         "Content-Type": "application/json"
     }
 
-    # 2. Create a Scan Target (Management Plane API)
+    # 2. Create a Scan Target (Using MGMT_BASE_URL and corrected payload structure)
     print("Creating scan target...")
-    target_payload = {"endpoint": MODEL_ENDPOINT, "name": "CI-CD-Lab-Target"}
-    target_resp = requests.post(f"{MGMT_BASE_URL}/v1/target", headers=headers, json=target_payload)
-    target_resp.raise_for_status()
-    # Assuming the API returns 'id' or 'uuid', adjust if the Target API docs specify otherwise
-    target_id = target_resp.json().get("id") or target_resp.json().get("uuid") 
-    print(f"Target created with ID: {target_id}")
-
-    # 3. Trigger the Scan (Data Plane API) - UPDATED PAYLOAD
-    print("Triggering the scan...")
-    scan_payload = {
-        "name": "GitHub-Actions-Scan",
-        "target": {
-            "uuid": target_id,
-            "version": 0
-        },
-        "job_type": "DYNAMIC",
-        "job_metadata": {}
+    target_payload = {
+        "name": "CI-CD-Lab-Target",
+        "connection_params": {
+            "api_endpoint": MODEL_ENDPOINT
+        }
     }
-    scan_resp = requests.post(f"{DATA_BASE_URL}/v1/scan", headers=headers, json=scan_payload)
-    scan_resp.raise_for_status()
-    # The response likely returns job_id or uuid for the scan
-    job_id = scan_resp.json().get("job_id") or scan_resp.json().get("id")
+    target_resp = requests.post(f"{MGMT_BASE_URL}/target", headers=headers, json=target_payload)
+    
+    # Let's print the error out clearly if it fails again
+    if not target_resp.ok:
+        print(f"Failed to create target: {target_resp.text}")
+        target_resp.raise_for_status()
+        
+    target_id = target_resp.json().get("id")
+    print(f"Target created successfully. Target ID: {target_id}")
+
+    # 3. Trigger the Scan (Using DATA_BASE_URL)
+    print("Triggering the scan...")
+    scan_payload = {"target_id": target_id, "scan_type": "automated"}
+    scan_resp = requests.post(f"{DATA_BASE_URL}/scan", headers=headers, json=scan_payload)
+    
+    if not scan_resp.ok:
+        print(f"Failed to trigger scan: {scan_resp.text}")
+        scan_resp.raise_for_status()
+        
+    job_id = scan_resp.json().get("job_id")
     print(f"Scan triggered successfully. Job ID: {job_id}")
 
-    # 4. Poll for Scan Completion (Data Plane API)
+    # 4. Poll for Scan Completion (Using DATA_BASE_URL)
     status = "PENDING"
     while status in ["PENDING", "IN_PROGRESS"]:
         time.sleep(15) 
-        poll_resp = requests.get(f"{DATA_BASE_URL}/v1/scan/{job_id}", headers=headers)
-        poll_resp.raise_for_status()
-        status = poll_resp.json().get("status", "IN_PROGRESS")
+        poll_resp = requests.get(f"{DATA_BASE_URL}/scan/{job_id}", headers=headers)
+        status = poll_resp.json().get("status")
         print(f"Current scan status: {status}")
 
     if status in ["FAILED", "ABORTED"]:
         print("Scan failed to complete.")
         sys.exit(1)
 
-    # 5. Fetch the Report (Data Plane API)
+    # 5. Fetch the Report (Using DATA_BASE_URL)
     print("Scan completed. Fetching report...")
-    report_resp = requests.get(f"{DATA_BASE_URL}/v1/report/dynamic/{job_id}/report", headers=headers)
-    report_resp.raise_for_status()
+    report_resp = requests.get(f"{DATA_BASE_URL}/report/dynamic/{job_id}/report", headers=headers)
     report_data = report_resp.json()
 
     with open("airs_report.json", "w") as f:
