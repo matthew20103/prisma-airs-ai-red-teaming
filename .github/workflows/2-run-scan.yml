@@ -1,0 +1,38 @@
+name: 2. Prisma AIRS - Run Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_name:
+        description: 'Name of the Target to Scan (Must already exist)'
+        required: true
+        default: 'Production-AI-Agent'
+      scan_type:
+        description: 'Type of Scan (e.g., attack_library or agent)'
+        required: true
+        default: 'attack_library'
+
+jobs:
+  execute-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install requests
+      - name: Run Prisma AIRS Scan
+        env:
+          PRISMA_CLIENT_ID: "${{ secrets.PRISMA_CLIENT_ID }}"
+          PRISMA_CLIENT_SECRET: "${{ secrets.PRISMA_CLIENT_SECRET }}"
+          PRISMA_TSG_ID: "${{ secrets.PRISMA_TSG_ID }}"
+          TARGET_NAME: "${{ inputs.target_name }}"
+          SCAN_TYPE: "${{ inputs.scan_type }}"
+        run: python .github/scripts/run_scan.py
+
+      - name: Upload Report
+        if: always() 
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-security-report
+          path: scan_report.json
