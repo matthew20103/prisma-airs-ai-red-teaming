@@ -3,7 +3,25 @@ name: Prisma AIRS AI Red Teaming
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: 
+  # This adds the manual trigger with dynamic input fields in the GitHub UI!
+  workflow_dispatch:
+    inputs:
+      target_name:
+        description: 'Name of the AI Target in Prisma AIRS'
+        required: true
+        default: 'Production-AI-Agent'
+      api_endpoint:
+        description: 'URL of the AI Model Endpoint'
+        required: true
+        default: 'https://mock-ai-app.example.com/api/chat'
+      request_json:
+        description: 'JSON structure for the Request Payload (Must contain {INPUT})'
+        required: true
+        default: '{"prompt": "{INPUT}"}'
+      response_json:
+        description: 'JSON structure for the Response Payload (Must contain {RESPONSE})'
+        required: true
+        default: '{"reply": "{RESPONSE}"}'
 
 jobs:
   run-ai-security-scan:
@@ -28,7 +46,14 @@ jobs:
           PRISMA_CLIENT_ID: ${{ secrets.PRISMA_CLIENT_ID }}
           PRISMA_CLIENT_SECRET: ${{ secrets.PRISMA_CLIENT_SECRET }}
           PRISMA_TSG_ID: ${{ secrets.PRISMA_TSG_ID }}
-          MODEL_ENDPOINT: "https://my-lab-app.internal/api/chat" 
+          
+          # Map the user inputs down to the Python Script. 
+          # The '||' acts as a fallback if the workflow is triggered by a code push instead of manual dispatch.
+          TARGET_NAME: ${{ github.event.inputs.target_name || 'Production-AI-Agent' }}
+          MODEL_ENDPOINT: ${{ github.event.inputs.api_endpoint || 'https://mock-ai-app.example.com/api/chat' }}
+          REQUEST_JSON: ${{ github.event.inputs.request_json || '{"prompt": "{INPUT}"}' }}
+          RESPONSE_JSON: ${{ github.event.inputs.response_json || '{"reply": "{RESPONSE}"}' }}
+          
         run: python .github/scripts/run_airs_scan.py
 
       - name: Upload Scan Report Artifacts
