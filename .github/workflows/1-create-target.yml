@@ -19,20 +19,35 @@ on:
         description: 'Response Payload (Must contain {RESPONSE})'
         required: true
         default: '{"reply": "{RESPONSE}"}'
-      description:
-        description: '(Optional) Target Description'
-        required: false
-        default: 'Managed by GitHub Actions CI/CD'
-      target_type:
-        description: '(Optional) Target Type'
-        required: false
-        default: ''
-      connection_type:
-        description: '(Optional) Connection Type'
+      request_headers:
+        description: 'Request Headers (JSON Format)'
+        required: true
+        default: '{"Content-Type": "application/json"}'
+      response_key:
+        description: '(Optional) Specific Response Key to parse'
         required: false
         default: ''
-      
-      # --- UPDATED SECTION BELOW ---
+        
+      # MULTI-TURN SETTINGS
+      multi_turn_type:
+        description: 'Multi-Turn Session Configuration'
+        required: true
+        type: choice
+        options:
+          - none
+          - stateful
+          - stateless
+        default: 'none'
+      multi_turn_req_id:
+        description: '(Optional) JSON path to inject session ID (e.g., previous_response_id)'
+        required: false
+        default: ''
+      multi_turn_resp_id:
+        description: '(Optional) JSON path to extract session ID (e.g., id)'
+        required: false
+        default: ''
+        
+      # TARGET METADATA
       api_endpoint_type:
         description: 'API Endpoint Accessibility Type'
         required: true
@@ -42,6 +57,14 @@ on:
           - PRIVATE
           - NETWORK_BROKER
         default: 'PUBLIC'
+      target_type:
+        description: '(Optional) Target Type'
+        required: false
+        default: ''
+      connection_type:
+        description: '(Optional) Connection Type'
+        required: false
+        default: ''
 
 jobs:
   setup-target:
@@ -57,14 +80,22 @@ jobs:
           PRISMA_CLIENT_ID: "${{ secrets.PRISMA_CLIENT_ID }}"
           PRISMA_CLIENT_SECRET: "${{ secrets.PRISMA_CLIENT_SECRET }}"
           PRISMA_TSG_ID: "${{ secrets.PRISMA_TSG_ID }}"
+          
           TARGET_NAME: "${{ inputs.target_name }}"
           MODEL_ENDPOINT: "${{ inputs.api_endpoint }}"
           REQUEST_JSON: |
             ${{ inputs.request_json }}
           RESPONSE_JSON: |
             ${{ inputs.response_json }}
-          DESCRIPTION: "${{ inputs.description }}"
+          REQUEST_HEADERS: |
+            ${{ inputs.request_headers }}
+          RESPONSE_KEY: "${{ inputs.response_key }}"
+          
+          MULTI_TURN_TYPE: "${{ inputs.multi_turn_type }}"
+          MULTI_TURN_REQ_ID: "${{ inputs.multi_turn_req_id }}"
+          MULTI_TURN_RESP_ID: "${{ inputs.multi_turn_resp_id }}"
+          
+          API_ENDPOINT_TYPE: "${{ inputs.api_endpoint_type }}"
           TARGET_TYPE: "${{ inputs.target_type }}"
           CONNECTION_TYPE: "${{ inputs.connection_type }}"
-          API_ENDPOINT_TYPE: "${{ inputs.api_endpoint_type }}"
         run: python .github/scripts/create_target.py
