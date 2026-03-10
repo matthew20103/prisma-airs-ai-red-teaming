@@ -19,6 +19,22 @@ on:
         description: 'Response Payload (Must contain {RESPONSE})'
         required: true
         default: '{"reply": "{RESPONSE}"}'
+      description:
+        description: '(Optional) Target Description'
+        required: false
+        default: 'Managed by GitHub Actions CI/CD'
+      target_type:
+        description: '(Optional) Target Type'
+        required: false
+        default: ''
+      connection_type:
+        description: '(Optional) Connection Type'
+        required: false
+        default: ''
+      api_endpoint_type:
+        description: '(Optional) API Endpoint Type'
+        required: false
+        default: ''
 
 jobs:
   setup-target:
@@ -40,4 +56,8 @@ jobs:
             ${{ inputs.request_json }}
           RESPONSE_JSON: |
             ${{ inputs.response_json }}
+          DESCRIPTION: "${{ inputs.description }}"
+          TARGET_TYPE: "${{ inputs.target_type }}"
+          CONNECTION_TYPE: "${{ inputs.connection_type }}"
+          API_ENDPOINT_TYPE: "${{ inputs.api_endpoint_type }}"
         run: python .github/scripts/create_target.py
