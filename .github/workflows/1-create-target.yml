@@ -1,0 +1,43 @@
+name: 1. Prisma AIRS - Create Target
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_name:
+        description: 'Name of the AI Target'
+        required: true
+        default: 'Production-AI-Agent'
+      api_endpoint:
+        description: 'URL of the AI Endpoint'
+        required: true
+        default: 'https://mock-ai-app.example.com/api/chat'
+      request_json:
+        description: 'Request Payload (Must contain {INPUT})'
+        required: true
+        default: '{"prompt": "{INPUT}"}'
+      response_json:
+        description: 'Response Payload (Must contain {RESPONSE})'
+        required: true
+        default: '{"reply": "{RESPONSE}"}'
+
+jobs:
+  setup-target:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install requests
+      - name: Create and Profile Target
+        env:
+          PRISMA_CLIENT_ID: "${{ secrets.PRISMA_CLIENT_ID }}"
+          PRISMA_CLIENT_SECRET: "${{ secrets.PRISMA_CLIENT_SECRET }}"
+          PRISMA_TSG_ID: "${{ secrets.PRISMA_TSG_ID }}"
+          TARGET_NAME: "${{ inputs.target_name }}"
+          MODEL_ENDPOINT: "${{ inputs.api_endpoint }}"
+          REQUEST_JSON: |
+            ${{ inputs.request_json }}
+          RESPONSE_JSON: |
+            ${{ inputs.response_json }}
+        run: python .github/scripts/create_target.py
