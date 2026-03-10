@@ -31,10 +31,17 @@ on:
         description: '(Optional) Connection Type'
         required: false
         default: ''
+      
+      # --- UPDATED SECTION BELOW ---
       api_endpoint_type:
-        description: '(Optional) API Endpoint Type'
-        required: false
-        default: ''
+        description: 'API Endpoint Accessibility Type'
+        required: true
+        type: choice
+        options:
+          - PUBLIC
+          - PRIVATE
+          - NETWORK_BROKER
+        default: 'PUBLIC'
 
 jobs:
   setup-target:
