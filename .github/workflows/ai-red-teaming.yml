@@ -31,9 +31,11 @@ jobs:
           MODEL_ENDPOINT: "https://my-lab-app.internal/api/chat" 
         run: python .github/scripts/run_airs_scan.py
 
-      - name: Upload Scan Report Artifact
+      - name: Upload Scan Report Artifacts
         if: always() 
         uses: actions/upload-artifact@v4
         with:
-          name: ai-security-report
-          path: airs_report.json
+          name: ai-security-reports
+          path: |
+            airs_attack_library_report.json
+            airs_agent_report.json
