@@ -8,8 +8,18 @@ import json
 CLIENT_ID = os.environ.get("PRISMA_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("PRISMA_CLIENT_SECRET")
 TSG_ID = os.environ.get("PRISMA_TSG_ID")
+
+# Dynamic variables passed from GitHub Actions
+TARGET_NAME = os.environ.get("TARGET_NAME", "Dynamic-AI-Target")
 MODEL_ENDPOINT = os.environ.get("MODEL_ENDPOINT")
-TARGET_NAME = "Production-AI-Agent"
+
+# Parse the incoming string payloads into actual JSON objects
+try:
+    REQUEST_JSON = json.loads(os.environ.get("REQUEST_JSON", '{"prompt": "{INPUT}"}'))
+    RESPONSE_JSON = json.loads(os.environ.get("RESPONSE_JSON", '{"reply": "{RESPONSE}"}'))
+except json.JSONDecodeError as e:
+    print(f"CRITICAL ERROR: Failed to parse input JSON payloads. Please check your GitHub Actions configuration. Details: {e}")
+    sys.exit(1)
 
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
 MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/mgmt-plane/v1"
@@ -26,7 +36,6 @@ def make_headers(token):
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 def manage_target(headers):
-    # 1. Check if target exists
     print(f"Checking for existing target named '{TARGET_NAME}'...")
     list_resp = requests.get(f"{MGMT_BASE_URL}/target", headers=headers)
     list_resp.raise_for_status()
@@ -34,16 +43,13 @@ def manage_target(headers):
     existing_targets = list_resp.json().get("data", [])
     target_id = None
     
+    # Using the fully dynamic payload mapping!
     target_payload = {
         "name": TARGET_NAME,
         "connection_params": {
             "api_endpoint": MODEL_ENDPOINT,
-            "request_json": {
-                "prompt": "{INPUT}"
-            },
-            "response_json": {
-                "reply": "{RESPONSE}" 
-            }
+            "request_json": REQUEST_JSON,
+            "response_json": RESPONSE_JSON
         }
     }
 
@@ -52,7 +58,6 @@ def manage_target(headers):
             target_id = t.get("id")
             break
 
-    # 2. Create or Update
     if target_id:
         print(f"Target found ({target_id}). Updating existing target...")
         resp = requests.put(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers, json=target_payload)
@@ -80,7 +85,7 @@ def run_profiling(headers, target_id):
         if prof_resp.ok:
             status = prof_resp.json().get("status", "COMPLETED").upper()
         else:
-            status = "COMPLETED" # Fallback if endpoint differs
+            status = "COMPLETED" 
             
     print("Target profiling completed successfully!")
 
@@ -121,17 +126,12 @@ def main():
     token = get_access_token()
     headers = make_headers(token)
 
-    # Phase 1: Target Management & Profiling
     target_id = manage_target(headers)
     run_profiling(headers, target_id)
 
-    # Phase 2: Dual Scanning
-    # Note: If 'attack_library' or 'agent' throw a 400 error, check the API doc 
-    # for the exact string enum required for these scan types.
     lib_job_id = trigger_scan(headers, target_id, "attack_library")
     agent_job_id = trigger_scan(headers, target_id, "agent")
 
-    # Phase 3: Wait and Evaluate
     print("\n--- Waiting for Scans to Complete ---")
     lib_report = poll_and_fetch_report(headers, lib_job_id, "attack_library")
     agent_report = poll_and_fetch_report(headers, agent_job_id, "agent")
