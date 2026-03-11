@@ -129,32 +129,27 @@ def main():
         print(f"Creating new target: {target_name}")
         resp = requests.post(f"{MGMT_BASE_URL}/target", headers=headers, json=target_payload, params=query_params)
         
+    # ... (previous code above this stays exactly the same) ...
+        
     if not resp.ok:
         print(f"Target management failed: {resp.text}")
         if "validation_error" in resp.text:
             print("\n[!] VALIDATION FAILED: Prisma AIRS rejected the payload or couldn't reach the endpoint.")
-            print("[!] Check the DEBUG payload above to ensure your schema and authentication headers are correct.")
         sys.exit(1)
         
-    target_id = target_id or resp.json().get("id")
+    # FIX: The API returns "uuid" on creation, not "id"
+    target_id = target_id or resp.json().get("uuid") or resp.json().get("id")
     print(f"Target is ready! ID: {target_id}")
 
-    # --- Profiling Check ---
-    print("Triggering and checking profiling status...")
-    probe_resp = requests.post(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
-    if not probe_resp.ok:
-        print(f"Note on profiling trigger: {probe_resp.text}")
-
-    status = "IN_PROGRESS"
-    while status in ["PENDING", "IN_PROGRESS", "RUNNING"]:
-        time.sleep(10)
-        prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
-        if prof_resp.ok:
-            status = prof_resp.json().get("status", "COMPLETED").upper()
+    # --- Trigger Profiling and Exit ---
+    if target_id:
+        print("Triggering profiling phase...")
+        probe_resp = requests.post(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
+        if probe_resp.ok:
+            print("✅ Profiling successfully triggered in the background!")
+            print("You can check the status later using the 'Check Profiling' workflow.")
         else:
-            status = "COMPLETED"
+            print(f"⚠️ Note on profiling trigger: {probe_resp.text}")
             
-    print("Target setup and profiling phase completed!")
-
 if __name__ == "__main__":
     main()
