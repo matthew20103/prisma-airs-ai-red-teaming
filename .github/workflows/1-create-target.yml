@@ -69,48 +69,17 @@ on:
         required: true
         default: '{"reply": "{RESPONSE}"}'
         
-      # --- Multi-Turn & Rate Limit ---
-      mt_enabled:
-        description: 'Enable Multi-Turn Session?'
-        type: choice
-        required: true
-        options:
-          - 'false'
-          - 'true'
-        default: 'false'
-      mt_type:
-        description: 'Multi-Turn Type'
-        type: choice
-        required: true
-        options:
-          - 'stateful'
-          - 'stateless'
-        default: 'stateful'
-      mt_response_id_field:
-        description: 'Multi-Turn Response ID Field'
+      # --- Advanced JSON Templates ---
+      multi_turn_config:
+        description: 'Multi-Turn Config (JSON Template - Leave empty to disable)'
         type: string
         required: false
-        default: 'id'
-      mt_request_id_field:
-        description: 'Multi-Turn Request ID Field'
+        default: '{"type": "stateful", "response_id_field": "id", "request_id_field": "previous_response_id"}'
+      target_metadata:
+        description: 'Target Rate Limit / Metadata (JSON Template)'
         type: string
         required: false
-        default: 'previous_response_id'
-      rate_limit_enabled:
-        description: 'Enable Rate Limiting?'
-        type: choice
-        required: true
-        options:
-          - 'false'
-          - 'true'
-        default: 'false'
-      target_rate_limit:
-        description: 'Target Rate Limit'
-        type: string
-        required: true
-        default: '100'
-
-      # --- Metadata with Built-In JSON Templates ---
+        default: '{"rate_limit_enabled": false, "rate_limit": 100}'
       target_background:
         description: 'Target Background (JSON Template)'
         type: string
@@ -150,15 +119,11 @@ jobs:
             ${{ inputs.request_json }}
           RESPONSE_JSON: |
             ${{ inputs.response_json }}
-          
-          MT_ENABLED: "${{ inputs.mt_enabled }}"
-          MT_TYPE: "${{ inputs.mt_type }}"
-          MT_RESPONSE_ID_FIELD: "${{ inputs.mt_response_id_field }}"
-          MT_REQUEST_ID_FIELD: "${{ inputs.mt_request_id_field }}"
-          
-          RATE_LIMIT_ENABLED: "${{ inputs.rate_limit_enabled }}"
-          TARGET_RATE_LIMIT: "${{ inputs.target_rate_limit }}"
-
+            
+          MULTI_TURN_CONFIG: |
+            ${{ inputs.multi_turn_config }}
+          TARGET_METADATA: |
+            ${{ inputs.target_metadata }}
           TARGET_BACKGROUND: |
             ${{ inputs.target_background }}
           ADDITIONAL_CONTEXT: |
