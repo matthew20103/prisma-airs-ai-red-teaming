@@ -1,112 +1,127 @@
-name: 1. Prisma AIRS - Create Target
+import os
+import time
+import requests
+import sys
+import json
 
-on:
-  workflow_dispatch:
-    inputs:
-      target_name:
-        description: 'Name of AI Agent'
-        required: true
-      description:
-        description: 'Description'
-        required: false
-      target_type:
-        description: 'Target Type'
-        required: true
-        type: choice
-        options:
-          - APPLICATION
-          - AGENT
-          - MODEL
-        default: 'AGENT'
-      connection_type:
-        description: 'Connection Type'
-        required: true
-        type: choice
-        options:
-          - REST
-          - STREAMING
-        default: 'REST'
-      api_endpoint_type:
-        description: 'API Endpoint Type'
-        required: true
-        type: choice
-        options:
-          - PUBLIC
-          - PRIVATE
-          - NETWORK_BROKER
-        default: 'PUBLIC'
-      nb_channel_uuid:
-        description: 'NB Channel UUID (Required if using NETWORK_BROKER)'
-        required: false
-      api_endpoint:
-        description: 'URL of the AI Endpoint'
-        required: true
-      session_supported:
-        description: 'Session Supported?'
-        required: true
-        type: choice
-        options:
-          - 'false'
-          - 'true'
-        default: 'false'
-      request_headers:
-        description: 'Request Headers (JSON)'
-        required: false
-        default: '{"Content-Type": "application/json"}'
-      request_json:
-        description: 'Request Payload (JSON containing {INPUT})'
-        required: true
-        default: '{"prompt": "{INPUT}"}'
-      response_json:
-        description: 'Response Payload (JSON containing {RESPONSE})'
-        required: true
-        default: '{"reply": "{RESPONSE}"}'
-      multi_turn_config:
-        description: 'Multi-Turn Session Configuration (JSON)'
-        required: false
-      target_rate_limit:
-        description: 'Target Rate Limit (Integer)'
-        required: false
-      target_background:
-        description: 'Target Background (JSON)'
-        required: false
-      additional_context:
-        description: 'Additional Context (JSON)'
-        required: false
+CLIENT_ID = os.environ.get("PRISMA_CLIENT_ID")
+CLIENT_SECRET = os.environ.get("PRISMA_CLIENT_SECRET")
+TSG_ID = os.environ.get("PRISMA_TSG_ID")
 
-jobs:
-  setup-target:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: pip install requests
-      - name: Create and Profile Target
-        env:
-          PRISMA_CLIENT_ID: "${{ secrets.PRISMA_CLIENT_ID }}"
-          PRISMA_CLIENT_SECRET: "${{ secrets.PRISMA_CLIENT_SECRET }}"
-          PRISMA_TSG_ID: "${{ secrets.PRISMA_TSG_ID }}"
-          TARGET_NAME: "${{ inputs.target_name }}"
-          DESCRIPTION: "${{ inputs.description }}"
-          TARGET_TYPE: "${{ inputs.target_type }}"
-          CONNECTION_TYPE: "${{ inputs.connection_type }}"
-          API_ENDPOINT_TYPE: "${{ inputs.api_endpoint_type }}"
-          NB_CHANNEL_UUID: "${{ inputs.nb_channel_uuid }}"
-          MODEL_ENDPOINT: "${{ inputs.api_endpoint }}"
-          SESSION_SUPPORTED: "${{ inputs.session_supported }}"
-          REQUEST_HEADERS: |
-            ${{ inputs.request_headers }}
-          REQUEST_JSON: |
-            ${{ inputs.request_json }}
-          RESPONSE_JSON: |
-            ${{ inputs.response_json }}
-          MULTI_TURN_CONFIG: |
-            ${{ inputs.multi_turn_config }}
-          TARGET_RATE_LIMIT: "${{ inputs.target_rate_limit }}"
-          TARGET_BACKGROUND: |
-            ${{ inputs.target_background }}
-          ADDITIONAL_CONTEXT: |
-            ${{ inputs.additional_context }}
-        run: python .github/scripts/create_target.py
+AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
+MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/mgmt-plane/v1"
+
+def get_access_token():
+    payload = {"grant_type": "client_credentials", "scope": f"tsg_id:{TSG_ID}"}
+    resp = requests.post(AUTH_URL, data=payload, auth=(CLIENT_ID, CLIENT_SECRET))
+    resp.raise_for_status()
+    return resp.json().get("access_token")
+
+def parse_json_env(var_name, default=None):
+    val = os.environ.get(var_name, "").strip()
+    if not val:
+        return default
+    try:
+        return json.loads(val)
+    except json.JSONDecodeError as e:
+        print(f"Warning: Failed to parse {var_name} as JSON. Check your Action inputs. Error: {e}")
+        return default
+
+def main():
+    headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
+    target_name = os.environ.get("TARGET_NAME")
+
+    # 1. Base Required Payload
+    target_payload = {
+        "name": target_name,
+        "target_type": os.environ.get("TARGET_TYPE", "AGENT"),
+        "connection_type": os.environ.get("CONNECTION_TYPE", "REST"),
+        "api_endpoint_type": os.environ.get("API_ENDPOINT_TYPE", "PUBLIC"),
+        "session_supported": os.environ.get("SESSION_SUPPORTED", "false").lower() == "true",
+        "connection_params": {
+            "api_endpoint": os.environ.get("MODEL_ENDPOINT"),
+            "request_json": parse_json_env("REQUEST_JSON", {}),
+            "response_json": parse_json_env("RESPONSE_JSON", {})
+        }
+    }
+
+    # 2. String/Optional Fields
+    description = os.environ.get("DESCRIPTION", "").strip()
+    if description:
+        target_payload["description"] = description
+
+    nb_uuid = os.environ.get("NB_CHANNEL_UUID", "").strip()
+    if nb_uuid:
+        target_payload["network_broker_channel_uuid"] = nb_uuid
+
+    req_headers = parse_json_env("REQUEST_HEADERS")
+    if req_headers:
+        target_payload["connection_params"]["request_headers"] = req_headers
+
+    # 3. Multi-Turn Logic
+    mt_enabled = os.environ.get("MT_ENABLED", "false").lower() == "true"
+    if mt_enabled:
+        target_payload["multi_turn_config"] = {
+            "type": os.environ.get("MT_TYPE", "stateful"),
+            "response_id_field": os.environ.get("MT_RESPONSE_ID_FIELD", "id").strip(),
+            "request_id_field": os.environ.get("MT_REQUEST_ID_FIELD", "previous_response_id").strip()
+        }
+
+    # 4. Target Metadata (Rate Limiting)
+    rate_limit_enabled = os.environ.get("RATE_LIMIT_ENABLED", "false").lower() == "true"
+    target_rate_limit = os.environ.get("TARGET_RATE_LIMIT", "100").strip()
+    
+    target_payload["target_metadata"] = {
+        "rate_limit_enabled": rate_limit_enabled,
+        "rate_limit": int(target_rate_limit) if target_rate_limit.isdigit() else 100
+    }
+
+    # 5. Background and Context
+    target_bg = parse_json_env("TARGET_BACKGROUND")
+    if target_bg:
+        target_payload["target_background"] = target_bg
+
+    add_context = parse_json_env("ADDITIONAL_CONTEXT")
+    if add_context:
+        target_payload["additional_context"] = add_context
+
+    # --- Target Management Execution ---
+    list_resp = requests.get(f"{MGMT_BASE_URL}/target", headers=headers)
+    existing_targets = list_resp.json().get("data", [])
+    target_id = next((t.get("id") for t in existing_targets if t.get("name") == target_name), None)
+
+    query_params = {"validate": "true"}
+
+    if target_id:
+        print(f"Updating existing target: {target_name} ({target_id})")
+        resp = requests.put(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers, json=target_payload, params=query_params)
+    else:
+        print(f"Creating new target: {target_name}")
+        resp = requests.post(f"{MGMT_BASE_URL}/target", headers=headers, json=target_payload, params=query_params)
+        
+    if not resp.ok:
+        print(f"Target management failed: {resp.text}")
+        sys.exit(1)
+        
+    target_id = target_id or resp.json().get("id")
+    print(f"Target is ready! ID: {target_id}")
+
+    # --- Profiling Check ---
+    print("Triggering and checking profiling status...")
+    probe_resp = requests.post(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
+    if not probe_resp.ok:
+        print(f"Note on profiling trigger: {probe_resp.text}")
+
+    status = "IN_PROGRESS"
+    while status in ["PENDING", "IN_PROGRESS", "RUNNING"]:
+        time.sleep(10)
+        prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
+        if prof_resp.ok:
+            status = prof_resp.json().get("status", "COMPLETED").upper()
+        else:
+            status = "COMPLETED"
+            
+    print("Target setup and profiling phase completed!")
+
+if __name__ == "__main__":
+    main()
