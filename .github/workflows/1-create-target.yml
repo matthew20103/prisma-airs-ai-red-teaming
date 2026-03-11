@@ -19,9 +19,24 @@ on:
           - 'APPLICATION'
           - 'AGENT'
           - 'MODEL'
-        default: 'AGENT'
+        default: 'APPLICATION'
+      
+      # --- Explicit API Documented Types ---
       connection_type:
-        description: 'Connection Type'
+        description: 'Connection Type / Provider'
+        type: choice
+        required: true
+        options:
+          - 'CUSTOM'
+          - 'REST'
+          - 'STREAMING'
+          - 'OPENAI'
+          - 'BEDROCK'
+          - 'DATABRICKS'
+          - 'HUGGING_FACE'
+        default: 'CUSTOM'  # <--- DEFAULT LOCKED TO CUSTOM HERE
+      response_mode:
+        description: 'Response Mode'
         type: choice
         required: true
         options:
@@ -36,7 +51,8 @@ on:
           - 'PUBLIC'
           - 'PRIVATE'
           - 'NETWORK_BROKER'
-        default: 'PUBLIC'
+        default: 'NETWORK_BROKER'
+        
       nb_channel_uuid:
         description: 'NB Channel UUID (Required if using NETWORK_BROKER)'
         type: string
@@ -71,12 +87,12 @@ on:
         
       # --- Advanced JSON Templates ---
       multi_turn_config:
-        description: 'Multi-Turn Config (JSON Template - Leave empty to disable)'
+        description: 'Multi-Turn Config (JSON Template)'
         type: string
         required: false
         default: '{"type": "stateful", "response_id_field": "id", "request_id_field": "previous_response_id"}'
       target_metadata:
-        description: 'Target Rate Limit / Metadata (JSON Template)'
+        description: 'Target Rate Limit / Metadata (JSON)'
         type: string
         required: false
         default: '{"rate_limit_enabled": false, "rate_limit": 100}'
@@ -109,6 +125,7 @@ jobs:
           DESCRIPTION: "${{ inputs.description }}"
           TARGET_TYPE: "${{ inputs.target_type }}"
           CONNECTION_TYPE: "${{ inputs.connection_type }}"
+          RESPONSE_MODE: "${{ inputs.response_mode }}"
           API_ENDPOINT_TYPE: "${{ inputs.api_endpoint_type }}"
           NB_CHANNEL_UUID: "${{ inputs.nb_channel_uuid }}"
           MODEL_ENDPOINT: "${{ inputs.api_endpoint }}"
