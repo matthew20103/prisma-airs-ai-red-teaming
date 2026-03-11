@@ -41,26 +41,14 @@ def main():
         print("Error: TARGET_NAME is required.")
         sys.exit(1)
 
-    # --- THE MAGIC MAPPING FIX ---
-    # Read the user's dropdown choice
-    ui_connection_choice = os.environ.get("CONNECTION_TYPE", "REST")
-    
-    # Map it exactly how the Prisma AIRS Web UI maps it behind the scenes
-    if ui_connection_choice in ["REST", "STREAMING"]:
-        api_connection_type = "CUSTOM"
-        api_response_mode = ui_connection_choice
-    else:
-        api_connection_type = ui_connection_choice
-        api_response_mode = "REST"
-
     session_supported = os.environ.get("SESSION_SUPPORTED", "false").lower() == "true"
 
-    # 1. Base Variables
+    # 1. Base Variables (Direct 1-to-1 Mapping to API Docs)
     target_payload = {
         "name": target_name,
         "target_type": os.environ.get("TARGET_TYPE", "APPLICATION"),
-        "connection_type": api_connection_type,     # Now correctly sends "CUSTOM"
-        "response_mode": api_response_mode,         # Now correctly sends "REST" or "STREAMING"
+        "connection_type": os.environ.get("CONNECTION_TYPE", "CUSTOM"),
+        "response_mode": os.environ.get("RESPONSE_MODE", "REST"),
         "api_endpoint_type": os.environ.get("API_ENDPOINT_TYPE", "PUBLIC"),
         "session_supported": session_supported,
         "connection_params": {
