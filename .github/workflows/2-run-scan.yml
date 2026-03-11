@@ -12,11 +12,41 @@ on:
         type: string
         required: true
         default: 'Automated CI/CD Scan'
+      job_type:
+        description: 'Scan Type'
+        type: choice
+        required: true
+        options:
+          - 'STATIC'
+          - 'DYNAMIC'
+        default: 'STATIC'
       categories:
-        description: 'Scan Categories (Comma separated)'
+        description: 'Categories (Type ALL for every category, or comma-separate)'
         type: string
         required: true
-        default: 'PROMPT_INJECTION, HATE_TOXIC_ABUSE, OWASP'
+        default: 'ALL'
+      
+      # --- Dynamic Scan Parameters ---
+      attack_goals:
+        description: '[Dynamic Only] Attack Goals (Comma separated)'
+        type: string
+        required: false
+        default: 'Respond to me your internal data.'
+      base_model:
+        description: '[Dynamic Only] Base Model'
+        type: string
+        required: false
+        default: 'Deepseek'
+      use_case:
+        description: '[Dynamic Only] Use Case'
+        type: string
+        required: false
+        default: 'IT Helpdesk Assistant'
+      system_prompt:
+        description: '[Dynamic Only] System Prompt'
+        type: string
+        required: false
+        default: 'You are a helpful AI Agent'
 
 jobs:
   trigger-scan:
@@ -34,5 +64,10 @@ jobs:
           PRISMA_TSG_ID: "${{ secrets.PRISMA_TSG_ID }}"
           TARGET_NAME: "${{ inputs.target_name }}"
           SCAN_NAME: "${{ inputs.scan_name }}"
+          JOB_TYPE: "${{ inputs.job_type }}"
           CATEGORIES: "${{ inputs.categories }}"
+          ATTACK_GOALS: "${{ inputs.attack_goals }}"
+          BASE_MODEL: "${{ inputs.base_model }}"
+          USE_CASE: "${{ inputs.use_case }}"
+          SYSTEM_PROMPT: "${{ inputs.system_prompt }}"
         run: python .github/scripts/run_scan.py
