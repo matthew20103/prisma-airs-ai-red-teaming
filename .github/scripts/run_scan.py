@@ -79,18 +79,18 @@ def main():
 
     # --- 2A. Build STATIC Payload (Categories Only) ---
     if JOB_TYPE == "STATIC":
-        # FIX: Using the correct lowercase JSON property keys instead of OpenAPI Schema Type Names
+        # FIX: Using the uppercase JSON property keys from the official API example
         sec_cats = parse_categories(SEC_CATS_INPUT)
-        if sec_cats: categories_payload["security"] = sec_cats
+        if sec_cats: categories_payload["SECURITY"] = sec_cats
             
         saf_cats = parse_categories(SAF_CATS_INPUT)
-        if saf_cats: categories_payload["safety"] = saf_cats
+        if saf_cats: categories_payload["SAFETY"] = saf_cats
             
         brn_cats = parse_categories(BRN_CATS_INPUT)
-        if brn_cats: categories_payload["brand"] = brn_cats
+        if brn_cats: categories_payload["BRAND"] = brn_cats
             
         cmp_cats = parse_categories(CMP_CATS_INPUT)
-        if cmp_cats: categories_payload["compliance"] = cmp_cats
+        if cmp_cats: categories_payload["COMPLIANCE"] = cmp_cats
 
         if not categories_payload:
             print("Error: STATIC scan requires at least one valid attack category. (Did you type NONE for all of them?)")
@@ -108,6 +108,18 @@ def main():
             job_metadata["use_case"] = USE_CASE
         if SYSTEM_PROMPT and SYSTEM_PROMPT.strip().upper() not in ['NONE', 'NA', '-']:
             job_metadata["system_prompt"] = SYSTEM_PROMPT
+
+    # Inject explicit defaults for STATIC to satisfy strict schema validators based on official sample
+    if JOB_TYPE == "STATIC":
+        job_metadata["rate_limit_enabled"] = False
+        job_metadata["rate_limit"] = 0
+        job_metadata["rate_limit_error_code"] = 0
+        job_metadata["rate_limit_error_message"] = "string"
+        job_metadata["rate_limit_error_json"] = {}
+        job_metadata["content_filter_enabled"] = False
+        job_metadata["content_filter_error_code"] = 0
+        job_metadata["content_filter_error_message"] = "string"
+        job_metadata["content_filter_error_json"] = {}
 
     scan_payload = {
         "name": SCAN_NAME,
