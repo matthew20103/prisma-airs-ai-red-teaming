@@ -11,13 +11,13 @@ TARGET_NAME = os.environ.get("TARGET_NAME")
 SCAN_NAME = os.environ.get("SCAN_NAME", "Automated CI/CD Scan")
 JOB_TYPE = os.environ.get("JOB_TYPE", "STATIC").upper()
 
-# Category Inputs
+# Category Inputs (STATIC)
 SEC_CATS_INPUT = os.environ.get("SECURITY_CATEGORIES", "")
 SAF_CATS_INPUT = os.environ.get("SAFETY_CATEGORIES", "")
 BRN_CATS_INPUT = os.environ.get("BRAND_CATEGORIES", "")
 CMP_CATS_INPUT = os.environ.get("COMPLIANCE_CATEGORIES", "")
 
-# Dynamic Context Inputs
+# Dynamic Context Inputs (DYNAMIC)
 ATTACK_GOALS = os.environ.get("ATTACK_GOALS", "")
 BASE_MODEL = os.environ.get("BASE_MODEL", "")
 USE_CASE = os.environ.get("USE_CASE", "")
@@ -45,7 +45,6 @@ def parse_categories(input_str):
     if not input_str: 
         return []
     cats = [c.strip().upper() for c in input_str.split(",")]
-    # Strip out empty strings and words indicating the user wants to skip this category
     exclusion_words = ['NONE', 'NA', 'N/A', 'NULL', 'FALSE', '-', '']
     return [c for c in cats if c not in exclusion_words]
 
@@ -75,37 +74,31 @@ def main():
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
     print(f"✅ Found Target! ID: {target_id}")
 
-    # --- 2. Build Category Payload explicitly ---
+    job_metadata = {}
     categories_payload = {}
-    
-    sec_cats = parse_categories(SEC_CATS_INPUT)
-    if sec_cats: categories_payload["SecuritySubCategory"] = sec_cats
-        
-    saf_cats = parse_categories(SAF_CATS_INPUT)
-    if saf_cats: categories_payload["SafetySubCategory"] = saf_cats
-        
-    brn_cats = parse_categories(BRN_CATS_INPUT)
-    if brn_cats: categories_payload["BrandSubCategory"] = brn_cats
-        
-    cmp_cats = parse_categories(CMP_CATS_INPUT)
-    if cmp_cats: categories_payload["ComplianceSubCategory"] = cmp_cats
 
-    if not categories_payload:
-        print("Error: No valid categories provided. You must select at least one attack category.")
-        sys.exit(1)
-
-    # --- 3. Build the Data-Plane Payload ---
-    job_metadata = {
-        "categories": categories_payload
-    }
-
-    # Inject explicit defaults for STATIC to satisfy strict schema validators
+    # --- 2A. Build STATIC Payload (Categories Only) ---
     if JOB_TYPE == "STATIC":
-        job_metadata["rate_limit_enabled"] = False
-        job_metadata["content_filter_enabled"] = False
+        sec_cats = parse_categories(SEC_CATS_INPUT)
+        if sec_cats: categories_payload["SecuritySubCategory"] = sec_cats
+            
+        saf_cats = parse_categories(SAF_CATS_INPUT)
+        if saf_cats: categories_payload["SafetySubCategory"] = saf_cats
+            
+        brn_cats = parse_categories(BRN_CATS_INPUT)
+        if brn_cats: categories_payload["BrandSubCategory"] = brn_cats
+            
+        cmp_cats = parse_categories(CMP_CATS_INPUT)
+        if cmp_cats: categories_payload["ComplianceSubCategory"] = cmp_cats
 
-    # Inject Dynamic properties if requested
-    if JOB_TYPE == "DYNAMIC":
+        if not categories_payload:
+            print("Error: STATIC scan requires at least one valid attack category. (Did you type NONE for all of them?)")
+            sys.exit(1)
+            
+        job_metadata["categories"] = categories_payload
+
+    # --- 2B. Build DYNAMIC Payload (Context Only) ---
+    elif JOB_TYPE == "DYNAMIC":
         if ATTACK_GOALS and ATTACK_GOALS.strip().upper() not in ['NONE', 'NA', '-']:
             job_metadata["attack_goals"] = [g.strip() for g in ATTACK_GOALS.split(",") if g.strip()]
         if BASE_MODEL and BASE_MODEL.strip().upper() not in ['NONE', 'NA', '-']:
@@ -128,7 +121,7 @@ def main():
     print(json.dumps(scan_payload, indent=2))
     print("---------------------------\n")
 
-    # --- 4. DATA-PLANE: Trigger the Scan ---
+    # --- 3. DATA-PLANE: Trigger the Scan ---
     print(f"Triggering Prisma AIRS Scan: '{SCAN_NAME}' via Data-Plane...")
     scan_resp = requests.post(f"{DATA_BASE_URL}/scan", headers=headers, json=scan_payload)
 
@@ -141,26 +134,23 @@ def main():
 
     print(f"✅ Scan successfully started! Scan ID: {scan_id}")
 
-    # --- 5. Write Beautiful Summary to GitHub UI ---
+    # --- 4. Write Beautiful Summary to GitHub UI ---
     write_summary(f"## 🛡️ Prisma AIRS Red Team Scan Triggered")
     write_summary(f"**Target:** `{TARGET_NAME}`")
     write_summary(f"**Scan Name:** `{SCAN_NAME}`")
     write_summary(f"**Scan ID:** `{scan_id}`")
     write_summary(f"**Job Type:** `{JOB_TYPE}`")
     
-    if JOB_TYPE == "DYNAMIC":
+    if JOB_TYPE == "STATIC":
+        write_summary(f"### 🎯 Attack Categories Executing:")
+        write_summary("```json\n" + json.dumps(categories_payload, indent=2) + "\n```")
+    elif JOB_TYPE == "DYNAMIC":
         write_summary("### ⚙️ Dynamic Context Parameters")
-        if ATTACK_GOALS and ATTACK_GOALS.strip().upper() not in ['NONE', 'NA', '-']: 
-            write_summary(f"- **Attack Goals:** `{ATTACK_GOALS}`")
-        if BASE_MODEL and BASE_MODEL.strip().upper() not in ['NONE', 'NA', '-']: 
-            write_summary(f"- **Base Model:** `{BASE_MODEL}`")
-        if USE_CASE and USE_CASE.strip().upper() not in ['NONE', 'NA', '-']: 
-            write_summary(f"- **Use Case:** `{USE_CASE}`")
-        if SYSTEM_PROMPT and SYSTEM_PROMPT.strip().upper() not in ['NONE', 'NA', '-']: 
-            write_summary(f"- **System Prompt:** `{SYSTEM_PROMPT}`")
+        if "attack_goals" in job_metadata: write_summary(f"- **Attack Goals:** `{ATTACK_GOALS}`")
+        if "base_model" in job_metadata: write_summary(f"- **Base Model:** `{BASE_MODEL}`")
+        if "use_case" in job_metadata: write_summary(f"- **Use Case:** `{USE_CASE}`")
+        if "system_prompt" in job_metadata: write_summary(f"- **System Prompt:** `{SYSTEM_PROMPT}`")
 
-    write_summary(f"### 🎯 Attack Categories Executing:")
-    write_summary("```json\n" + json.dumps(categories_payload, indent=2) + "\n```")
     write_summary("\n*The scan is now running in the background. Check the Prisma AIRS console for live execution details and reports.*")
 
 if __name__ == "__main__":
