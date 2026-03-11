@@ -42,8 +42,13 @@ def main():
         sys.exit(1)
 
     session_supported = os.environ.get("SESSION_SUPPORTED", "false").lower() == "true"
+    
+    # --- NEW: Extract the Response Key dynamically ---
+    resp_json = parse_json_env("RESPONSE_JSON", {"reply": "{RESPONSE}"})
+    # This grabs the first key from the dictionary (e.g., "output" from {"output": "{RESPONSE}"})
+    response_key = next(iter(resp_json.keys()), "reply") if resp_json else "reply"
 
-    # 1. Base Variables (Direct 1-to-1 Mapping to API Docs)
+    # 1. Base Variables
     target_payload = {
         "name": target_name,
         "target_type": os.environ.get("TARGET_TYPE", "APPLICATION"),
@@ -51,10 +56,14 @@ def main():
         "response_mode": os.environ.get("RESPONSE_MODE", "REST"),
         "api_endpoint_type": os.environ.get("API_ENDPOINT_TYPE", "PUBLIC"),
         "session_supported": session_supported,
+        "extra_info": {
+            "response_key": response_key  # <-- INJECTED HERE
+        },
         "connection_params": {
             "api_endpoint": os.environ.get("MODEL_ENDPOINT"),
             "request_json": parse_json_env("REQUEST_JSON", {"prompt": "{INPUT}"}),
-            "response_json": parse_json_env("RESPONSE_JSON", {"reply": "{RESPONSE}"})
+            "response_json": resp_json,
+            "response_key": response_key  # <-- AND INJECTED HERE
         }
     }
 
