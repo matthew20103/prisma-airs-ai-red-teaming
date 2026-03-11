@@ -1,19 +1,25 @@
-name: 2. Prisma AIRS - Run Scan
+name: 2. Prisma AIRS - Run Red Team Scan
 
 on:
   workflow_dispatch:
     inputs:
       target_name:
-        description: 'Name of the Target to Scan (Must already exist)'
+        description: 'Name of the AI Target to scan'
+        type: string
         required: true
-        default: 'Production-AI-Agent'
-      scan_type:
-        description: 'Type of Scan (e.g., attack_library or agent)'
+      scan_name:
+        description: 'Name for this Scan Job'
+        type: string
         required: true
-        default: 'attack_library'
+        default: 'Automated CI/CD Scan'
+      categories:
+        description: 'Scan Categories (Comma separated)'
+        type: string
+        required: true
+        default: 'HARMFUL_CONTENT, PROMPT_INJECTION, SENSITIVE_DATA_DISCLOSURE'
 
 jobs:
-  execute-scan:
+  trigger-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,18 +27,12 @@ jobs:
         with:
           python-version: '3.10'
       - run: pip install requests
-      - name: Run Prisma AIRS Scan
+      - name: Trigger Scan
         env:
           PRISMA_CLIENT_ID: "${{ secrets.PRISMA_CLIENT_ID }}"
           PRISMA_CLIENT_SECRET: "${{ secrets.PRISMA_CLIENT_SECRET }}"
           PRISMA_TSG_ID: "${{ secrets.PRISMA_TSG_ID }}"
           TARGET_NAME: "${{ inputs.target_name }}"
-          SCAN_TYPE: "${{ inputs.scan_type }}"
+          SCAN_NAME: "${{ inputs.scan_name }}"
+          CATEGORIES: "${{ inputs.categories }}"
         run: python .github/scripts/run_scan.py
-
-      - name: Upload Report
-        if: always() 
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-security-report
-          path: scan_report.json
