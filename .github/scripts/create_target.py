@@ -30,7 +30,12 @@ def parse_json_env(var_name, default=None):
 
 def main():
     print("Generating OAuth 2.0 Access Token...")
-    headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
+    try:
+        headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
+    except Exception as e:
+        print(f"Authentication failed: {e}")
+        sys.exit(1)
+        
     target_name = os.environ.get("TARGET_NAME")
 
     if not target_name:
@@ -66,7 +71,6 @@ def main():
 
     # 3. JSON Configuration Blocks
     mt_config = parse_json_env("MULTI_TURN_CONFIG")
-    # If the user leaves it blank or provides an empty JSON object {}, we pass None to disable it
     if mt_config and "type" in mt_config:
         target_payload["multi_turn_config"] = mt_config
     else:
@@ -95,8 +99,15 @@ def main():
     existing_targets = list_resp.json().get("data", [])
     target_id = next((t.get("id") for t in existing_targets if t.get("name") == target_name), None)
 
-    # Validate flag ensures the Prisma AIRS API catches any schema errors
+    # Validate flag ensures the Prisma AIRS API tests the connection
     query_params = {"validate": "true"}
+
+    # ==========================================
+    # DEBUG OUTPUT: Print the exact payload
+    # ==========================================
+    print("\n--- DEBUG: Payload being sent to Prisma AIRS ---")
+    print(json.dumps(target_payload, indent=2))
+    print("------------------------------------------------\n")
 
     if target_id:
         print(f"Updating existing target: {target_name} ({target_id})")
@@ -107,6 +118,13 @@ def main():
         
     if not resp.ok:
         print(f"Target management failed: {resp.text}")
+        
+        # Add a helpful hint to the logs if validation fails
+        if "validation_error" in resp.text:
+            print("\n[!] VALIDATION FAILED: Check the DEBUG payload printed above.")
+            print("[!] 1. Does your `request_headers` JSON include the correct Authentication token for Deepseek?")
+            print("[!] 2. Do your `request_json` and `response_json` schemas exactly match the Deepseek API docs?")
+        
         sys.exit(1)
         
     target_id = target_id or resp.json().get("id")
