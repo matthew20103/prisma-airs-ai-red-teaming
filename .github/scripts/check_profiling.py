@@ -32,7 +32,6 @@ def main():
         print(f"Failed to list targets: {list_resp.text}")
         sys.exit(1)
 
-    # Find target by name
     existing_targets = list_resp.json().get("data", [])
     target_obj = next((t for t in existing_targets if t.get("name") == TARGET_NAME), None)
 
@@ -47,34 +46,50 @@ def main():
     details_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers)
     target_data = details_resp.json() if details_resp.ok else {}
     
-    # 2. Fetch the dedicated Profiling Data
-    print("Fetching deep profiling data...\n")
+    # 2. Fetch the Profiling Data
+    print("Fetching deep profiling data from API...\n")
     prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
+    
+    # Fallback: Sometimes APIs use /profile instead of /profiling for GET requests
+    if prof_resp.status_code == 404:
+        prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profile", headers=headers)
+        
     prof_data = prof_resp.json() if prof_resp.ok else {}
 
-    # Check status from either endpoint
+    # Determine Status
     profiling_status = prof_data.get("status") or target_data.get("profiling_status", "UNKNOWN")
-    profiling_status = profiling_status.upper()
+    profiling_status = str(profiling_status).upper()
 
     print(f"Current Profiling Status: {profiling_status}")
     print("-" * 50)
 
     if profiling_status == "COMPLETED":
-        print("✅ Profiling is complete! Here is the FULL, unfiltered profiling data:\n")
+        print("✅ Profiling is complete! Here are the learned attributes based on the API Schema:\n")
         
-        # Print the rich profiling data (System Capabilities, etc.)
-        if prof_data:
-            print("--- DEDICATED PROFILING RESULTS ---")
-            print(json.dumps(prof_data, indent=2))
+        # Look for the dynamic fields in both possible API responses
+        other_details = prof_data.get("other_details") or target_data.get("other_details") or {}
+        ai_fields = prof_data.get("ai_generated_fields") or target_data.get("ai_generated_fields") or []
+        background = prof_data.get("target_background") or target_data.get("target_background") or {}
+        context = prof_data.get("additional_context") or target_data.get("additional_context") or {}
+
+        # 1. Print the "System Capabilities" (other_details)
+        if other_details:
+            print("--- SYSTEM CAPABILITIES (other_details) ---")
+            print(json.dumps(other_details, indent=2, ensure_ascii=False))
             print("\n")
-            
-        # Print the base contexts in case anything lives there
+        else:
+            print("--- SYSTEM CAPABILITIES ---")
+            print("No 'other_details' object found in the API response.\n")
+
+        # 2. Print AI Generated Fields list
+        if ai_fields:
+            print("--- AI GENERATED FIELDS ---")
+            print(json.dumps(ai_fields, indent=2))
+            print("\n")
+
+        # 3. Print the Standard Contexts
         print("--- TARGET CONTEXT & BACKGROUND ---")
-        context_data = {
-            "target_background": target_data.get("target_background", {}),
-            "additional_context": target_data.get("additional_context", {})
-        }
-        print(json.dumps(context_data, indent=2))
+        print(json.dumps({"target_background": background, "additional_context": context}, indent=2, ensure_ascii=False))
         
     elif profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"]:
         print("⏳ Profiling is still running. Please check back later.")
