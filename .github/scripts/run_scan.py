@@ -40,6 +40,15 @@ def get_access_token():
     resp.raise_for_status()
     return resp.json().get("access_token")
 
+def parse_categories(input_str):
+    """Smart parser that drops explicit exclusion keywords like NONE"""
+    if not input_str: 
+        return []
+    cats = [c.strip().upper() for c in input_str.split(",")]
+    # Strip out empty strings and words indicating the user wants to skip this category
+    exclusion_words = ['NONE', 'NA', 'N/A', 'NULL', 'FALSE', '-', '']
+    return [c for c in cats if c not in exclusion_words]
+
 def main():
     print("Generating OAuth 2.0 Access Token...")
     try:
@@ -69,32 +78,41 @@ def main():
     # --- 2. Build Category Payload explicitly ---
     categories_payload = {}
     
-    sec_cats = [c.strip().upper() for c in SEC_CATS_INPUT.split(",") if c.strip()]
+    sec_cats = parse_categories(SEC_CATS_INPUT)
     if sec_cats: categories_payload["SecuritySubCategory"] = sec_cats
         
-    saf_cats = [c.strip().upper() for c in SAF_CATS_INPUT.split(",") if c.strip()]
+    saf_cats = parse_categories(SAF_CATS_INPUT)
     if saf_cats: categories_payload["SafetySubCategory"] = saf_cats
         
-    brn_cats = [c.strip().upper() for c in BRN_CATS_INPUT.split(",") if c.strip()]
+    brn_cats = parse_categories(BRN_CATS_INPUT)
     if brn_cats: categories_payload["BrandSubCategory"] = brn_cats
         
-    cmp_cats = [c.strip().upper() for c in CMP_CATS_INPUT.split(",") if c.strip()]
+    cmp_cats = parse_categories(CMP_CATS_INPUT)
     if cmp_cats: categories_payload["ComplianceSubCategory"] = cmp_cats
+
+    if not categories_payload:
+        print("Error: No valid categories provided. You must select at least one attack category.")
+        sys.exit(1)
 
     # --- 3. Build the Data-Plane Payload ---
     job_metadata = {
         "categories": categories_payload
     }
 
+    # Inject explicit defaults for STATIC to satisfy strict schema validators
+    if JOB_TYPE == "STATIC":
+        job_metadata["rate_limit_enabled"] = False
+        job_metadata["content_filter_enabled"] = False
+
     # Inject Dynamic properties if requested
     if JOB_TYPE == "DYNAMIC":
-        if ATTACK_GOALS:
+        if ATTACK_GOALS and ATTACK_GOALS.strip().upper() not in ['NONE', 'NA', '-']:
             job_metadata["attack_goals"] = [g.strip() for g in ATTACK_GOALS.split(",") if g.strip()]
-        if BASE_MODEL:
+        if BASE_MODEL and BASE_MODEL.strip().upper() not in ['NONE', 'NA', '-']:
             job_metadata["base_model"] = BASE_MODEL
-        if USE_CASE:
+        if USE_CASE and USE_CASE.strip().upper() not in ['NONE', 'NA', '-']:
             job_metadata["use_case"] = USE_CASE
-        if SYSTEM_PROMPT:
+        if SYSTEM_PROMPT and SYSTEM_PROMPT.strip().upper() not in ['NONE', 'NA', '-']:
             job_metadata["system_prompt"] = SYSTEM_PROMPT
 
     scan_payload = {
@@ -132,10 +150,14 @@ def main():
     
     if JOB_TYPE == "DYNAMIC":
         write_summary("### ⚙️ Dynamic Context Parameters")
-        if ATTACK_GOALS: write_summary(f"- **Attack Goals:** `{ATTACK_GOALS}`")
-        if BASE_MODEL: write_summary(f"- **Base Model:** `{BASE_MODEL}`")
-        if USE_CASE: write_summary(f"- **Use Case:** `{USE_CASE}`")
-        if SYSTEM_PROMPT: write_summary(f"- **System Prompt:** `{SYSTEM_PROMPT}`")
+        if ATTACK_GOALS and ATTACK_GOALS.strip().upper() not in ['NONE', 'NA', '-']: 
+            write_summary(f"- **Attack Goals:** `{ATTACK_GOALS}`")
+        if BASE_MODEL and BASE_MODEL.strip().upper() not in ['NONE', 'NA', '-']: 
+            write_summary(f"- **Base Model:** `{BASE_MODEL}`")
+        if USE_CASE and USE_CASE.strip().upper() not in ['NONE', 'NA', '-']: 
+            write_summary(f"- **Use Case:** `{USE_CASE}`")
+        if SYSTEM_PROMPT and SYSTEM_PROMPT.strip().upper() not in ['NONE', 'NA', '-']: 
+            write_summary(f"- **System Prompt:** `{SYSTEM_PROMPT}`")
 
     write_summary(f"### 🎯 Attack Categories Executing:")
     write_summary("```json\n" + json.dumps(categories_payload, indent=2) + "\n```")
