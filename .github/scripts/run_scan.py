@@ -109,18 +109,6 @@ def main():
         if SYSTEM_PROMPT and SYSTEM_PROMPT.strip().upper() not in ['NONE', 'NA', '-']:
             job_metadata["system_prompt"] = SYSTEM_PROMPT
 
-    # Inject explicit defaults for STATIC to satisfy strict schema validators based on official sample
-    if JOB_TYPE == "STATIC":
-        job_metadata["rate_limit_enabled"] = False
-        job_metadata["rate_limit"] = 0
-        job_metadata["rate_limit_error_code"] = 0
-        job_metadata["rate_limit_error_message"] = "string"
-        job_metadata["rate_limit_error_json"] = {}
-        job_metadata["content_filter_enabled"] = False
-        job_metadata["content_filter_error_code"] = 0
-        job_metadata["content_filter_error_message"] = "string"
-        job_metadata["content_filter_error_json"] = {}
-
     scan_payload = {
         "name": SCAN_NAME,
         "target": {
