@@ -10,9 +10,14 @@ TSG_ID = os.environ.get("PRISMA_TSG_ID")
 TARGET_NAME = os.environ.get("TARGET_NAME")
 SCAN_NAME = os.environ.get("SCAN_NAME", "Automated CI/CD Scan")
 JOB_TYPE = os.environ.get("JOB_TYPE", "STATIC").upper()
-CATEGORIES_INPUT = os.environ.get("CATEGORIES", "ALL")
 
-# Dynamic Parameters
+# Category Inputs
+SEC_CATS_INPUT = os.environ.get("SECURITY_CATEGORIES", "")
+SAF_CATS_INPUT = os.environ.get("SAFETY_CATEGORIES", "")
+BRN_CATS_INPUT = os.environ.get("BRAND_CATEGORIES", "")
+CMP_CATS_INPUT = os.environ.get("COMPLIANCE_CATEGORIES", "")
+
+# Dynamic Context Inputs
 ATTACK_GOALS = os.environ.get("ATTACK_GOALS", "")
 BASE_MODEL = os.environ.get("BASE_MODEL", "")
 USE_CASE = os.environ.get("USE_CASE", "")
@@ -61,44 +66,27 @@ def main():
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
     print(f"✅ Found Target! ID: {target_id}")
 
-    # --- 2. Smart Category Mapper ---
-    SECURITY = ["ADVERSARIAL_SUFFIX", "EVASION", "INDIRECT_PROMPT_INJECTION", "JAILBREAK", "MULTI_TURN", "PROMPT_INJECTION", "REMOTE_CODE_EXECUTION", "SYSTEM_PROMPT_LEAK", "TOOL_LEAK", "MALWARE_GENERATION"]
-    SAFETY = ["BIAS", "CBRN", "CYBERCRIME", "DRUGS", "HATE_TOXIC_ABUSE", "NON_VIOLENT_CRIMES", "POLITICAL", "SELF_HARM", "SEXUAL", "VIOLENT_CRIMES_WEAPONS"]
-    BRAND = ["COMPETITOR_ENDORSEMENTS", "BRAND_TARNISHING_SELF_CRITICISM", "DISCRIMINATING_CLAIMS", "POLITICAL_ENDORSEMENTS"]
-    COMPLIANCE = ["OWASP", "MITRE_ATLAS", "NIST", "DASF_V2"]
-
+    # --- 2. Build Category Payload explicitly ---
     categories_payload = {}
     
-    if CATEGORIES_INPUT.strip().upper() == "ALL":
-        # Inject EVERYTHING if the user used the ALL keyword
-        categories_payload = {
-            "SecuritySubCategory": SECURITY,
-            "SafetySubCategory": SAFETY,
-            "BrandSubCategory": BRAND,
-            "ComplianceSubCategory": COMPLIANCE
-        }
-    else:
-        # Map specific inputs dynamically
-        input_cats = [c.strip().upper() for c in CATEGORIES_INPUT.split(",") if c.strip()]
-        for cat in input_cats:
-            if cat in SECURITY:
-                categories_payload.setdefault("SecuritySubCategory", []).append(cat)
-            elif cat in SAFETY:
-                categories_payload.setdefault("SafetySubCategory", []).append(cat)
-            elif cat in BRAND:
-                categories_payload.setdefault("BrandSubCategory", []).append(cat)
-            elif cat in COMPLIANCE:
-                categories_payload.setdefault("ComplianceSubCategory", []).append(cat)
-            else:
-                print(f"⚠️ Warning: Unknown category '{cat}', defaulting to SecuritySubCategory")
-                categories_payload.setdefault("SecuritySubCategory", []).append(cat)
+    sec_cats = [c.strip().upper() for c in SEC_CATS_INPUT.split(",") if c.strip()]
+    if sec_cats: categories_payload["SecuritySubCategory"] = sec_cats
+        
+    saf_cats = [c.strip().upper() for c in SAF_CATS_INPUT.split(",") if c.strip()]
+    if saf_cats: categories_payload["SafetySubCategory"] = saf_cats
+        
+    brn_cats = [c.strip().upper() for c in BRN_CATS_INPUT.split(",") if c.strip()]
+    if brn_cats: categories_payload["BrandSubCategory"] = brn_cats
+        
+    cmp_cats = [c.strip().upper() for c in CMP_CATS_INPUT.split(",") if c.strip()]
+    if cmp_cats: categories_payload["ComplianceSubCategory"] = cmp_cats
 
     # --- 3. Build the Data-Plane Payload ---
     job_metadata = {
         "categories": categories_payload
     }
 
-    # Inject the LLM / Chatbot specific dynamic parameters if requested
+    # Inject Dynamic properties if requested
     if JOB_TYPE == "DYNAMIC":
         if ATTACK_GOALS:
             job_metadata["attack_goals"] = [g.strip() for g in ATTACK_GOALS.split(",") if g.strip()]
