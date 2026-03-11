@@ -1,0 +1,26 @@
+name: 4. Prisma AIRS - Check Profiling Status
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_name:
+        description: 'Name of the Target to check'
+        type: string
+        required: true
+
+jobs:
+  check-profiling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install requests
+      - name: Check Status
+        env:
+          PRISMA_CLIENT_ID: "${{ secrets.PRISMA_CLIENT_ID }}"
+          PRISMA_CLIENT_SECRET: "${{ secrets.PRISMA_CLIENT_SECRET }}"
+          PRISMA_TSG_ID: "${{ secrets.PRISMA_TSG_ID }}"
+          TARGET_NAME: "${{ inputs.target_name }}"
+        run: python .github/scripts/check_profiling.py
