@@ -25,7 +25,7 @@ def parse_json_env(var_name, default=None):
     try:
         return json.loads(val)
     except json.JSONDecodeError as e:
-        print(f"Warning: Failed to parse {var_name} as JSON. Check your Action inputs. Error: {e}")
+        print(f"Warning: Failed to parse {var_name} as JSON. Error: {e}")
         return default
 
 def main():
@@ -42,13 +42,15 @@ def main():
         print("Error: TARGET_NAME is required.")
         sys.exit(1)
 
-    # 1. Base Required Payload
+    # 1. Base Variables
+    session_supported = os.environ.get("SESSION_SUPPORTED", "false").lower() == "true"
+
     target_payload = {
         "name": target_name,
         "target_type": os.environ.get("TARGET_TYPE", "AGENT"),
         "connection_type": os.environ.get("CONNECTION_TYPE", "REST"),
         "api_endpoint_type": os.environ.get("API_ENDPOINT_TYPE", "PUBLIC"),
-        "session_supported": os.environ.get("SESSION_SUPPORTED", "false").lower() == "true",
+        "session_supported": session_supported,
         "connection_params": {
             "api_endpoint": os.environ.get("MODEL_ENDPOINT"),
             "request_json": parse_json_env("REQUEST_JSON", {"prompt": "{INPUT}"}),
@@ -69,17 +71,22 @@ def main():
     if req_headers:
         target_payload["connection_params"]["request_headers"] = req_headers
 
-    # 3. JSON Configuration Blocks
-    mt_config = parse_json_env("MULTI_TURN_CONFIG")
-    if mt_config and "type" in mt_config:
-        target_payload["multi_turn_config"] = mt_config
-    else:
-        target_payload["multi_turn_config"] = None
+    # 3. STRICT SCHEMA FIX: Only add multi_turn config if session_supported is True
+    if session_supported:
+        mt_config = parse_json_env("MULTI_TURN_CONFIG")
+        if mt_config and "type" in mt_config:
+            target_payload["multi_turn_config"] = mt_config
 
-    target_meta = parse_json_env("TARGET_METADATA")
-    if target_meta:
-        target_payload["target_metadata"] = target_meta
+    # 4. STRICT SCHEMA FIX: Only add rate_limit integer if rate_limit_enabled is True
+    rate_limit_enabled = os.environ.get("RATE_LIMIT_ENABLED", "false").lower() == "true"
+    target_payload["target_metadata"] = {
+        "rate_limit_enabled": rate_limit_enabled
+    }
+    if rate_limit_enabled:
+        target_rate_limit = os.environ.get("TARGET_RATE_LIMIT", "100").strip()
+        target_payload["target_metadata"]["rate_limit"] = int(target_rate_limit) if target_rate_limit.isdigit() else 100
 
+    # 5. Context blocks
     target_bg = parse_json_env("TARGET_BACKGROUND")
     if target_bg:
         target_payload["target_background"] = target_bg
@@ -99,15 +106,12 @@ def main():
     existing_targets = list_resp.json().get("data", [])
     target_id = next((t.get("id") for t in existing_targets if t.get("name") == target_name), None)
 
-    # Validate flag ensures the Prisma AIRS API tests the connection
+    # STRICT VALIDATION: Ensure Prisma AIRS actively pings the endpoint to verify connectivity
     query_params = {"validate": "true"}
 
-    # ==========================================
-    # DEBUG OUTPUT: Print the exact payload
-    # ==========================================
-    print("\n--- DEBUG: Payload being sent to Prisma AIRS ---")
+    print("\n--- DEBUG: Smart Payload being sent to Prisma AIRS ---")
     print(json.dumps(target_payload, indent=2))
-    print("------------------------------------------------\n")
+    print("------------------------------------------------------\n")
 
     if target_id:
         print(f"Updating existing target: {target_name} ({target_id})")
@@ -118,13 +122,9 @@ def main():
         
     if not resp.ok:
         print(f"Target management failed: {resp.text}")
-        
-        # Add a helpful hint to the logs if validation fails
         if "validation_error" in resp.text:
-            print("\n[!] VALIDATION FAILED: Check the DEBUG payload printed above.")
-            print("[!] 1. Does your `request_headers` JSON include the correct Authentication token for Deepseek?")
-            print("[!] 2. Do your `request_json` and `response_json` schemas exactly match the Deepseek API docs?")
-        
+            print("\n[!] VALIDATION FAILED: Prisma AIRS rejected the payload or couldn't reach the endpoint.")
+            print("[!] Check the DEBUG payload above to ensure your schema and authentication headers are correct.")
         sys.exit(1)
         
     target_id = target_id or resp.json().get("id")
