@@ -1,5 +1,4 @@
 import os
-import time
 import requests
 import sys
 import json
@@ -43,7 +42,7 @@ def main():
 
     session_supported = os.environ.get("SESSION_SUPPORTED", "false").lower() == "true"
     
-    # --- NEW: Extract the Response Key dynamically ---
+    # --- Extract the Response Key dynamically ---
     resp_json = parse_json_env("RESPONSE_JSON", {"reply": "{RESPONSE}"})
     # This grabs the first key from the dictionary (e.g., "output" from {"output": "{RESPONSE}"})
     response_key = next(iter(resp_json.keys()), "reply") if resp_json else "reply"
@@ -57,13 +56,13 @@ def main():
         "api_endpoint_type": os.environ.get("API_ENDPOINT_TYPE", "PUBLIC"),
         "session_supported": session_supported,
         "extra_info": {
-            "response_key": response_key  # <-- INJECTED HERE
+            "response_key": response_key
         },
         "connection_params": {
             "api_endpoint": os.environ.get("MODEL_ENDPOINT"),
             "request_json": parse_json_env("REQUEST_JSON", {"prompt": "{INPUT}"}),
             "response_json": resp_json,
-            "response_key": response_key  # <-- AND INJECTED HERE
+            "response_key": response_key
         }
     }
 
@@ -129,27 +128,18 @@ def main():
         print(f"Creating new target: {target_name}")
         resp = requests.post(f"{MGMT_BASE_URL}/target", headers=headers, json=target_payload, params=query_params)
         
-    # ... (previous code above this stays exactly the same) ...
-        
     if not resp.ok:
         print(f"Target management failed: {resp.text}")
         if "validation_error" in resp.text:
             print("\n[!] VALIDATION FAILED: Prisma AIRS rejected the payload or couldn't reach the endpoint.")
+            print("[!] Check the DEBUG payload above to ensure your schema and authentication headers are correct.")
         sys.exit(1)
         
-    # FIX: The API returns "uuid" on creation, not "id"
+    # Extract the ID cleanly (API returns it as "uuid")
     target_id = target_id or resp.json().get("uuid") or resp.json().get("id")
-    print(f"Target is ready! ID: {target_id}")
+    print(f"\n✅ Target is successfully registered and validated! ID: {target_id}")
+    print("✅ Profiling has been automatically triggered by Prisma AIRS in the background.")
+    print("Use the 'Check Profiling Status' workflow to see the results later!")
 
-    # --- Trigger Profiling and Exit ---
-    if target_id:
-        print("Triggering profiling phase...")
-        probe_resp = requests.post(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
-        if probe_resp.ok:
-            print("✅ Profiling successfully triggered in the background!")
-            print("You can check the status later using the 'Check Profiling' workflow.")
-        else:
-            print(f"⚠️ Note on profiling trigger: {probe_resp.text}")
-            
 if __name__ == "__main__":
     main()
