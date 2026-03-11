@@ -27,6 +27,13 @@ def parse_json_env(var_name, default=None):
         print(f"Warning: Failed to parse {var_name} as JSON. Check your Action inputs. Error: {e}")
         return default
 
+def parse_comma_list(var_name):
+    """Parses a comma-separated environment variable into a Python list of strings."""
+    val = os.environ.get(var_name, "").strip()
+    if not val:
+        return []
+    return [item.strip() for item in val.split(",") if item.strip()]
+
 def main():
     headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
     target_name = os.environ.get("TARGET_NAME")
@@ -76,14 +83,33 @@ def main():
         "rate_limit": int(target_rate_limit) if target_rate_limit.isdigit() else 100
     }
 
-    # 5. Background and Context
-    target_bg = parse_json_env("TARGET_BACKGROUND")
-    if target_bg:
-        target_payload["target_background"] = target_bg
+    # 5. Target Background
+    bg_industry = os.environ.get("BG_INDUSTRY", "").strip()
+    bg_use_case = os.environ.get("BG_USE_CASE", "").strip()
+    bg_competitors = parse_comma_list("BG_COMPETITORS")
+    
+    if bg_industry or bg_use_case or bg_competitors:
+        target_payload["target_background"] = {}
+        if bg_industry: target_payload["target_background"]["industry"] = bg_industry
+        if bg_use_case: target_payload["target_background"]["use_case"] = bg_use_case
+        if bg_competitors: target_payload["target_background"]["competitors"] = bg_competitors
 
-    add_context = parse_json_env("ADDITIONAL_CONTEXT")
-    if add_context:
-        target_payload["additional_context"] = add_context
+    # 6. Additional Context
+    ctx_base_model = os.environ.get("CTX_BASE_MODEL", "").strip()
+    ctx_core_arch = os.environ.get("CTX_CORE_ARCHITECTURE", "").strip()
+    ctx_sys_prompt = os.environ.get("CTX_SYSTEM_PROMPT", "").strip()
+    ctx_langs = parse_comma_list("CTX_LANGUAGES_SUPPORTED")
+    ctx_banned = parse_comma_list("CTX_BANNED_KEYWORDS")
+    ctx_tools = parse_comma_list("CTX_TOOLS_ACCESSIBLE")
+
+    if any([ctx_base_model, ctx_core_arch, ctx_sys_prompt, ctx_langs, ctx_banned, ctx_tools]):
+        target_payload["additional_context"] = {}
+        if ctx_base_model: target_payload["additional_context"]["base_model"] = ctx_base_model
+        if ctx_core_arch: target_payload["additional_context"]["core_architecture"] = ctx_core_arch
+        if ctx_sys_prompt: target_payload["additional_context"]["system_prompt"] = ctx_sys_prompt
+        if ctx_langs: target_payload["additional_context"]["languages_supported"] = ctx_langs
+        if ctx_banned: target_payload["additional_context"]["banned_keywords"] = ctx_banned
+        if ctx_tools: target_payload["additional_context"]["tools_accessible"] = ctx_tools
 
     # --- Target Management Execution ---
     list_resp = requests.get(f"{MGMT_BASE_URL}/target", headers=headers)
