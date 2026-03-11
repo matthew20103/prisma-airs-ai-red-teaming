@@ -18,6 +18,7 @@ def get_access_token():
     return resp.json().get("access_token")
 
 def parse_json_env(var_name, default=None):
+    """Safely parse JSON strings from GitHub Action environment variables."""
     val = os.environ.get(var_name, "").strip()
     if not val:
         return default
@@ -27,16 +28,14 @@ def parse_json_env(var_name, default=None):
         print(f"Warning: Failed to parse {var_name} as JSON. Check your Action inputs. Error: {e}")
         return default
 
-def parse_comma_list(var_name):
-    """Parses a comma-separated environment variable into a Python list of strings."""
-    val = os.environ.get(var_name, "").strip()
-    if not val:
-        return []
-    return [item.strip() for item in val.split(",") if item.strip()]
-
 def main():
+    print("Generating OAuth 2.0 Access Token...")
     headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
     target_name = os.environ.get("TARGET_NAME")
+
+    if not target_name:
+        print("Error: TARGET_NAME is required.")
+        sys.exit(1)
 
     # 1. Base Required Payload
     target_payload = {
@@ -47,8 +46,8 @@ def main():
         "session_supported": os.environ.get("SESSION_SUPPORTED", "false").lower() == "true",
         "connection_params": {
             "api_endpoint": os.environ.get("MODEL_ENDPOINT"),
-            "request_json": parse_json_env("REQUEST_JSON", {}),
-            "response_json": parse_json_env("RESPONSE_JSON", {})
+            "request_json": parse_json_env("REQUEST_JSON", {"prompt": "{INPUT}"}),
+            "response_json": parse_json_env("RESPONSE_JSON", {"reply": "{RESPONSE}"})
         }
     }
 
@@ -58,7 +57,8 @@ def main():
         target_payload["description"] = description
 
     nb_uuid = os.environ.get("NB_CHANNEL_UUID", "").strip()
-    if nb_uuid:
+    # Only append the UUID if the user actually selected NETWORK_BROKER
+    if nb_uuid and target_payload["api_endpoint_type"] == "NETWORK_BROKER":
         target_payload["network_broker_channel_uuid"] = nb_uuid
 
     req_headers = parse_json_env("REQUEST_HEADERS")
@@ -73,6 +73,8 @@ def main():
             "response_id_field": os.environ.get("MT_RESPONSE_ID_FIELD", "id").strip(),
             "request_id_field": os.environ.get("MT_REQUEST_ID_FIELD", "previous_response_id").strip()
         }
+    else:
+        target_payload["multi_turn_config"] = None
 
     # 4. Target Metadata (Rate Limiting)
     rate_limit_enabled = os.environ.get("RATE_LIMIT_ENABLED", "false").lower() == "true"
@@ -83,39 +85,27 @@ def main():
         "rate_limit": int(target_rate_limit) if target_rate_limit.isdigit() else 100
     }
 
-    # 5. Target Background
-    bg_industry = os.environ.get("BG_INDUSTRY", "").strip()
-    bg_use_case = os.environ.get("BG_USE_CASE", "").strip()
-    bg_competitors = parse_comma_list("BG_COMPETITORS")
-    
-    if bg_industry or bg_use_case or bg_competitors:
-        target_payload["target_background"] = {}
-        if bg_industry: target_payload["target_background"]["industry"] = bg_industry
-        if bg_use_case: target_payload["target_background"]["use_case"] = bg_use_case
-        if bg_competitors: target_payload["target_background"]["competitors"] = bg_competitors
+    # 5. Background and Context (Parsed directly from the UI templates)
+    target_bg = parse_json_env("TARGET_BACKGROUND")
+    if target_bg:
+        target_payload["target_background"] = target_bg
 
-    # 6. Additional Context
-    ctx_base_model = os.environ.get("CTX_BASE_MODEL", "").strip()
-    ctx_core_arch = os.environ.get("CTX_CORE_ARCHITECTURE", "").strip()
-    ctx_sys_prompt = os.environ.get("CTX_SYSTEM_PROMPT", "").strip()
-    ctx_langs = parse_comma_list("CTX_LANGUAGES_SUPPORTED")
-    ctx_banned = parse_comma_list("CTX_BANNED_KEYWORDS")
-    ctx_tools = parse_comma_list("CTX_TOOLS_ACCESSIBLE")
-
-    if any([ctx_base_model, ctx_core_arch, ctx_sys_prompt, ctx_langs, ctx_banned, ctx_tools]):
-        target_payload["additional_context"] = {}
-        if ctx_base_model: target_payload["additional_context"]["base_model"] = ctx_base_model
-        if ctx_core_arch: target_payload["additional_context"]["core_architecture"] = ctx_core_arch
-        if ctx_sys_prompt: target_payload["additional_context"]["system_prompt"] = ctx_sys_prompt
-        if ctx_langs: target_payload["additional_context"]["languages_supported"] = ctx_langs
-        if ctx_banned: target_payload["additional_context"]["banned_keywords"] = ctx_banned
-        if ctx_tools: target_payload["additional_context"]["tools_accessible"] = ctx_tools
+    add_context = parse_json_env("ADDITIONAL_CONTEXT")
+    if add_context:
+        target_payload["additional_context"] = add_context
 
     # --- Target Management Execution ---
+    print(f"Checking for existing target named '{target_name}'...")
     list_resp = requests.get(f"{MGMT_BASE_URL}/target", headers=headers)
+    
+    if not list_resp.ok:
+        print(f"Failed to fetch targets: {list_resp.text}")
+        sys.exit(1)
+
     existing_targets = list_resp.json().get("data", [])
     target_id = next((t.get("id") for t in existing_targets if t.get("name") == target_name), None)
 
+    # Validate flag ensures the Prisma AIRS API catches any schema errors
     query_params = {"validate": "true"}
 
     if target_id:
