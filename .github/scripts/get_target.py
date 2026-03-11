@@ -25,7 +25,7 @@ def main():
         print(f"Authentication failed: {e}")
         sys.exit(1)
 
-    # 1. List targets to find the ID
+    # 1. List targets
     print(f"Searching for target: '{TARGET_NAME}'...")
     list_resp = requests.get(f"{MGMT_BASE_URL}/target", headers=headers)
     
@@ -34,33 +34,39 @@ def main():
         sys.exit(1)
 
     existing_targets = list_resp.json().get("data", [])
-    target_id = next((t.get("id") for t in existing_targets if t.get("name") == TARGET_NAME), None)
+    
+    # 2. Find the target object by name
+    target_obj = next((t for t in existing_targets if t.get("name") == TARGET_NAME), None)
 
-    if not target_id:
+    if not target_obj:
         print(f"Error: Could not find a target named '{TARGET_NAME}'.")
         print("Available targets are:")
         for t in existing_targets:
-            print(f" - {t.get('name')} (ID: {t.get('id')})")
+            print(f" - {t.get('name')}")
         sys.exit(1)
 
-    print(f"Found Target ID: {target_id}")
+    print("\n✅ Found the target in the list! Here is the raw configuration data:")
+    print("--------------------------------------------------")
+    print(json.dumps(target_obj, indent=2))
+    print("--------------------------------------------------")
 
-    # 2. Get the full target details
-    print("Fetching full target configuration...\n")
-    details_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers)
-    
-    if not details_resp.ok:
-        print(f"Failed to fetch target details: {details_resp.text}")
-        sys.exit(1)
+    # 3. Try to get deep-dive details (checking common ID fields)
+    target_id = target_obj.get("target_id") or target_obj.get("uuid") or target_obj.get("id")
 
-    target_data = details_resp.json()
-
-    # 3. Print the JSON cleanly
-    print("==================================================")
-    print(f" SUCCESSFUL CONFIGURATION FOR: {TARGET_NAME}")
-    print("==================================================")
-    print(json.dumps(target_data, indent=2))
-    print("==================================================")
+    if target_id:
+        print(f"\nFetching deep-dive details using ID: {target_id}...\n")
+        details_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers)
+        
+        if details_resp.ok:
+            print("==================================================")
+            print(f" FULL DEEP-DIVE CONFIGURATION FOR: {TARGET_NAME}")
+            print("==================================================")
+            print(json.dumps(details_resp.json(), indent=2))
+            print("==================================================")
+        else:
+            print(f"Failed to fetch details: {details_resp.text}")
+    else:
+        print("\n⚠️ Warning: Could not find an ID field to fetch deeper details, but the list data above should have what we need!")
 
 if __name__ == "__main__":
     main()
