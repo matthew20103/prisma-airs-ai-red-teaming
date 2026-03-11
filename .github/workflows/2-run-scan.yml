@@ -16,7 +16,7 @@ on:
         description: 'Scan Categories (Comma separated)'
         type: string
         required: true
-        default: 'HARMFUL_CONTENT, PROMPT_INJECTION, SENSITIVE_DATA_DISCLOSURE'
+        default: 'PROMPT_INJECTION, HATE_TOXIC_ABUSE, OWASP'
 
 jobs:
   trigger-scan:
