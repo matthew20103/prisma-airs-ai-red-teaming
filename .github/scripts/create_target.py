@@ -57,7 +57,6 @@ def main():
         target_payload["description"] = description
 
     nb_uuid = os.environ.get("NB_CHANNEL_UUID", "").strip()
-    # Only append the UUID if the user actually selected NETWORK_BROKER
     if nb_uuid and target_payload["api_endpoint_type"] == "NETWORK_BROKER":
         target_payload["network_broker_channel_uuid"] = nb_uuid
 
@@ -65,27 +64,18 @@ def main():
     if req_headers:
         target_payload["connection_params"]["request_headers"] = req_headers
 
-    # 3. Multi-Turn Logic
-    mt_enabled = os.environ.get("MT_ENABLED", "false").lower() == "true"
-    if mt_enabled:
-        target_payload["multi_turn_config"] = {
-            "type": os.environ.get("MT_TYPE", "stateful"),
-            "response_id_field": os.environ.get("MT_RESPONSE_ID_FIELD", "id").strip(),
-            "request_id_field": os.environ.get("MT_REQUEST_ID_FIELD", "previous_response_id").strip()
-        }
+    # 3. JSON Configuration Blocks
+    mt_config = parse_json_env("MULTI_TURN_CONFIG")
+    # If the user leaves it blank or provides an empty JSON object {}, we pass None to disable it
+    if mt_config and "type" in mt_config:
+        target_payload["multi_turn_config"] = mt_config
     else:
         target_payload["multi_turn_config"] = None
 
-    # 4. Target Metadata (Rate Limiting)
-    rate_limit_enabled = os.environ.get("RATE_LIMIT_ENABLED", "false").lower() == "true"
-    target_rate_limit = os.environ.get("TARGET_RATE_LIMIT", "100").strip()
-    
-    target_payload["target_metadata"] = {
-        "rate_limit_enabled": rate_limit_enabled,
-        "rate_limit": int(target_rate_limit) if target_rate_limit.isdigit() else 100
-    }
+    target_meta = parse_json_env("TARGET_METADATA")
+    if target_meta:
+        target_payload["target_metadata"] = target_meta
 
-    # 5. Background and Context (Parsed directly from the UI templates)
     target_bg = parse_json_env("TARGET_BACKGROUND")
     if target_bg:
         target_payload["target_background"] = target_bg
