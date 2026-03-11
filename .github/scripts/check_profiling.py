@@ -41,30 +41,40 @@ def main():
         sys.exit(1)
 
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
-    
     print(f"Found Target! ID: {target_id}")
-    print("Fetching profiling status...\n")
 
-    # Fetch deep dive details
+    # 1. Fetch deep dive details (Base configuration)
     details_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers)
-    if not details_resp.ok:
-        print(f"Failed to fetch details: {details_resp.text}")
-        sys.exit(1)
+    target_data = details_resp.json() if details_resp.ok else {}
+    
+    # 2. Fetch the dedicated Profiling Data
+    print("Fetching deep profiling data...\n")
+    prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
+    prof_data = prof_resp.json() if prof_resp.ok else {}
 
-    target_data = details_resp.json()
-    profiling_status = target_data.get("profiling_status", "UNKNOWN")
+    # Check status from either endpoint
+    profiling_status = prof_data.get("status") or target_data.get("profiling_status", "UNKNOWN")
+    profiling_status = profiling_status.upper()
 
     print(f"Current Profiling Status: {profiling_status}")
     print("-" * 50)
 
     if profiling_status == "COMPLETED":
-        print("✅ Profiling is complete! Here are the learned attributes:\n")
+        print("✅ Profiling is complete! Here is the FULL, unfiltered profiling data:\n")
         
-        # Extract and print just the learned contexts to keep the logs clean
-        background = target_data.get("target_background", {})
-        context = target_data.get("additional_context", {})
-        
-        print(json.dumps({"target_background": background, "additional_context": context}, indent=2))
+        # Print the rich profiling data (System Capabilities, etc.)
+        if prof_data:
+            print("--- DEDICATED PROFILING RESULTS ---")
+            print(json.dumps(prof_data, indent=2))
+            print("\n")
+            
+        # Print the base contexts in case anything lives there
+        print("--- TARGET CONTEXT & BACKGROUND ---")
+        context_data = {
+            "target_background": target_data.get("target_background", {}),
+            "additional_context": target_data.get("additional_context", {})
+        }
+        print(json.dumps(context_data, indent=2))
         
     elif profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"]:
         print("⏳ Profiling is still running. Please check back later.")
