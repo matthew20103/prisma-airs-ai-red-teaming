@@ -69,7 +69,7 @@ on:
         required: true
         default: '{"reply": "{RESPONSE}"}'
         
-      # --- Multi-Turn Configuration ---
+      # --- Multi-Turn & Rate Limit ---
       mt_enabled:
         description: 'Enable Multi-Turn Session?'
         type: choice
@@ -96,8 +96,6 @@ on:
         type: string
         required: false
         default: 'previous_response_id'
-
-      # --- Rate Limit Configuration ---
       rate_limit_enabled:
         description: 'Enable Rate Limiting?'
         type: choice
@@ -112,13 +110,43 @@ on:
         required: true
         default: '100'
 
-      # --- Metadata ---
-      target_background:
-        description: 'Target Background (JSON)'
+      # --- Target Background ---
+      bg_industry:
+        description: 'Target Industry (e.g., Healthcare)'
         type: string
         required: false
-      additional_context:
-        description: 'Additional Context (JSON)'
+      bg_use_case:
+        description: 'Target Use Case (e.g., Customer Support)'
+        type: string
+        required: false
+      bg_competitors:
+        description: 'Competitors (Comma-separated list)'
+        type: string
+        required: false
+
+      # --- Additional Context ---
+      ctx_base_model:
+        description: 'Base Model (e.g., GPT-4)'
+        type: string
+        required: false
+      ctx_core_architecture:
+        description: 'Core Architecture'
+        type: string
+        required: false
+      ctx_system_prompt:
+        description: 'System Prompt'
+        type: string
+        required: false
+      ctx_languages_supported:
+        description: 'Supported Languages (Comma-separated list)'
+        type: string
+        required: false
+      ctx_banned_keywords:
+        description: 'Banned Keywords (Comma-separated list)'
+        type: string
+        required: false
+      ctx_tools_accessible:
+        description: 'Accessible Tools (Comma-separated list)'
         type: string
         required: false
 
@@ -151,7 +179,6 @@ jobs:
           RESPONSE_JSON: |
             ${{ inputs.response_json }}
           
-          # Pass the new expanded inputs to Python
           MT_ENABLED: "${{ inputs.mt_enabled }}"
           MT_TYPE: "${{ inputs.mt_type }}"
           MT_RESPONSE_ID_FIELD: "${{ inputs.mt_response_id_field }}"
@@ -159,9 +186,17 @@ jobs:
           
           RATE_LIMIT_ENABLED: "${{ inputs.rate_limit_enabled }}"
           TARGET_RATE_LIMIT: "${{ inputs.target_rate_limit }}"
+
+          # New explicit context variables
+          BG_INDUSTRY: "${{ inputs.bg_industry }}"
+          BG_USE_CASE: "${{ inputs.bg_use_case }}"
+          BG_COMPETITORS: "${{ inputs.bg_competitors }}"
           
-          TARGET_BACKGROUND: |
-            ${{ inputs.target_background }}
-          ADDITIONAL_CONTEXT: |
-            ${{ inputs.additional_context }}
+          CTX_BASE_MODEL: "${{ inputs.ctx_base_model }}"
+          CTX_CORE_ARCHITECTURE: "${{ inputs.ctx_core_architecture }}"
+          CTX_SYSTEM_PROMPT: "${{ inputs.ctx_system_prompt }}"
+          CTX_LANGUAGES_SUPPORTED: "${{ inputs.ctx_languages_supported }}"
+          CTX_BANNED_KEYWORDS: "${{ inputs.ctx_banned_keywords }}"
+          CTX_TOOLS_ACCESSIBLE: "${{ inputs.ctx_tools_accessible }}"
+          
         run: python .github/scripts/create_target.py
