@@ -110,45 +110,17 @@ on:
         required: true
         default: '100'
 
-      # --- Target Background ---
-      bg_industry:
-        description: 'Target Industry (e.g., Healthcare)'
+      # --- Metadata with Built-In JSON Templates ---
+      target_background:
+        description: 'Target Background (JSON Template)'
         type: string
         required: false
-      bg_use_case:
-        description: 'Target Use Case (e.g., Customer Support)'
+        default: '{"industry": "Healthcare", "use_case": "Customer Support", "competitors": ["Product A", "Product B"]}'
+      additional_context:
+        description: 'Additional Context (JSON Template)'
         type: string
         required: false
-      bg_competitors:
-        description: 'Competitors (Comma-separated list)'
-        type: string
-        required: false
-
-      # --- Additional Context ---
-      ctx_base_model:
-        description: 'Base Model (e.g., GPT-4)'
-        type: string
-        required: false
-      ctx_core_architecture:
-        description: 'Core Architecture'
-        type: string
-        required: false
-      ctx_system_prompt:
-        description: 'System Prompt'
-        type: string
-        required: false
-      ctx_languages_supported:
-        description: 'Supported Languages (Comma-separated list)'
-        type: string
-        required: false
-      ctx_banned_keywords:
-        description: 'Banned Keywords (Comma-separated list)'
-        type: string
-        required: false
-      ctx_tools_accessible:
-        description: 'Accessible Tools (Comma-separated list)'
-        type: string
-        required: false
+        default: '{"base_model": "GPT-4", "core_architecture": "RAG", "system_prompt": "You are a helpful assistant.", "languages_supported": ["English", "Spanish"], "banned_keywords": ["competitor_name", "secret_project"], "tools_accessible": ["web_search"]}'
 
 jobs:
   setup-target:
@@ -187,16 +159,8 @@ jobs:
           RATE_LIMIT_ENABLED: "${{ inputs.rate_limit_enabled }}"
           TARGET_RATE_LIMIT: "${{ inputs.target_rate_limit }}"
 
-          # New explicit context variables
-          BG_INDUSTRY: "${{ inputs.bg_industry }}"
-          BG_USE_CASE: "${{ inputs.bg_use_case }}"
-          BG_COMPETITORS: "${{ inputs.bg_competitors }}"
-          
-          CTX_BASE_MODEL: "${{ inputs.ctx_base_model }}"
-          CTX_CORE_ARCHITECTURE: "${{ inputs.ctx_core_architecture }}"
-          CTX_SYSTEM_PROMPT: "${{ inputs.ctx_system_prompt }}"
-          CTX_LANGUAGES_SUPPORTED: "${{ inputs.ctx_languages_supported }}"
-          CTX_BANNED_KEYWORDS: "${{ inputs.ctx_banned_keywords }}"
-          CTX_TOOLS_ACCESSIBLE: "${{ inputs.ctx_tools_accessible }}"
-          
+          TARGET_BACKGROUND: |
+            ${{ inputs.target_background }}
+          ADDITIONAL_CONTEXT: |
+            ${{ inputs.additional_context }}
         run: python .github/scripts/create_target.py
