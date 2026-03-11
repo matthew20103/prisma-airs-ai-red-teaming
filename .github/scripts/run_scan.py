@@ -9,7 +9,14 @@ TSG_ID = os.environ.get("PRISMA_TSG_ID")
 
 TARGET_NAME = os.environ.get("TARGET_NAME")
 SCAN_NAME = os.environ.get("SCAN_NAME", "Automated CI/CD Scan")
-CATEGORIES_INPUT = os.environ.get("CATEGORIES", "PROMPT_INJECTION, HATE_TOXIC_ABUSE")
+JOB_TYPE = os.environ.get("JOB_TYPE", "STATIC").upper()
+CATEGORIES_INPUT = os.environ.get("CATEGORIES", "ALL")
+
+# Dynamic Parameters
+ATTACK_GOALS = os.environ.get("ATTACK_GOALS", "")
+BASE_MODEL = os.environ.get("BASE_MODEL", "")
+USE_CASE = os.environ.get("USE_CASE", "")
+SYSTEM_PROMPT = os.environ.get("SYSTEM_PROMPT", "")
 
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
 MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/mgmt-plane/v1"
@@ -61,31 +68,54 @@ def main():
     COMPLIANCE = ["OWASP", "MITRE_ATLAS", "NIST", "DASF_V2"]
 
     categories_payload = {}
-    input_cats = [c.strip().upper() for c in CATEGORIES_INPUT.split(",") if c.strip()]
     
-    for cat in input_cats:
-        if cat in SECURITY:
-            categories_payload.setdefault("SecuritySubCategory", []).append(cat)
-        elif cat in SAFETY:
-            categories_payload.setdefault("SafetySubCategory", []).append(cat)
-        elif cat in BRAND:
-            categories_payload.setdefault("BrandSubCategory", []).append(cat)
-        elif cat in COMPLIANCE:
-            categories_payload.setdefault("ComplianceSubCategory", []).append(cat)
-        else:
-            print(f"⚠️ Warning: Unknown category '{cat}', defaulting to SecuritySubCategory")
-            categories_payload.setdefault("SecuritySubCategory", []).append(cat)
+    if CATEGORIES_INPUT.strip().upper() == "ALL":
+        # Inject EVERYTHING if the user used the ALL keyword
+        categories_payload = {
+            "SecuritySubCategory": SECURITY,
+            "SafetySubCategory": SAFETY,
+            "BrandSubCategory": BRAND,
+            "ComplianceSubCategory": COMPLIANCE
+        }
+    else:
+        # Map specific inputs dynamically
+        input_cats = [c.strip().upper() for c in CATEGORIES_INPUT.split(",") if c.strip()]
+        for cat in input_cats:
+            if cat in SECURITY:
+                categories_payload.setdefault("SecuritySubCategory", []).append(cat)
+            elif cat in SAFETY:
+                categories_payload.setdefault("SafetySubCategory", []).append(cat)
+            elif cat in BRAND:
+                categories_payload.setdefault("BrandSubCategory", []).append(cat)
+            elif cat in COMPLIANCE:
+                categories_payload.setdefault("ComplianceSubCategory", []).append(cat)
+            else:
+                print(f"⚠️ Warning: Unknown category '{cat}', defaulting to SecuritySubCategory")
+                categories_payload.setdefault("SecuritySubCategory", []).append(cat)
 
     # --- 3. Build the Data-Plane Payload ---
+    job_metadata = {
+        "categories": categories_payload
+    }
+
+    # Inject the LLM / Chatbot specific dynamic parameters if requested
+    if JOB_TYPE == "DYNAMIC":
+        if ATTACK_GOALS:
+            job_metadata["attack_goals"] = [g.strip() for g in ATTACK_GOALS.split(",") if g.strip()]
+        if BASE_MODEL:
+            job_metadata["base_model"] = BASE_MODEL
+        if USE_CASE:
+            job_metadata["use_case"] = USE_CASE
+        if SYSTEM_PROMPT:
+            job_metadata["system_prompt"] = SYSTEM_PROMPT
+
     scan_payload = {
         "name": SCAN_NAME,
         "target": {
             "uuid": target_id
         },
-        "job_type": "DYNAMIC",
-        "job_metadata": {
-            "categories": categories_payload
-        }
+        "job_type": JOB_TYPE,
+        "job_metadata": job_metadata
     }
 
     print("\n--- DEBUG: Scan Payload ---")
@@ -110,6 +140,15 @@ def main():
     write_summary(f"**Target:** `{TARGET_NAME}`")
     write_summary(f"**Scan Name:** `{SCAN_NAME}`")
     write_summary(f"**Scan ID:** `{scan_id}`")
+    write_summary(f"**Job Type:** `{JOB_TYPE}`")
+    
+    if JOB_TYPE == "DYNAMIC":
+        write_summary("### ⚙️ Dynamic Context Parameters")
+        if ATTACK_GOALS: write_summary(f"- **Attack Goals:** `{ATTACK_GOALS}`")
+        if BASE_MODEL: write_summary(f"- **Base Model:** `{BASE_MODEL}`")
+        if USE_CASE: write_summary(f"- **Use Case:** `{USE_CASE}`")
+        if SYSTEM_PROMPT: write_summary(f"- **System Prompt:** `{SYSTEM_PROMPT}`")
+
     write_summary(f"### 🎯 Attack Categories Executing:")
     write_summary("```json\n" + json.dumps(categories_payload, indent=2) + "\n```")
     write_summary("\n*The scan is now running in the background. Check the Prisma AIRS console for live execution details and reports.*")
