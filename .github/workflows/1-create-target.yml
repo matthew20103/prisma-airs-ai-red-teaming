@@ -68,14 +68,51 @@ on:
         type: string
         required: true
         default: '{"reply": "{RESPONSE}"}'
-      multi_turn_config:
-        description: 'Multi-Turn Session Configuration (JSON)'
+        
+      # --- Multi-Turn Configuration ---
+      mt_enabled:
+        description: 'Enable Multi-Turn Session?'
+        type: choice
+        required: true
+        options:
+          - 'false'
+          - 'true'
+        default: 'false'
+      mt_type:
+        description: 'Multi-Turn Type'
+        type: choice
+        required: true
+        options:
+          - 'stateful'
+          - 'stateless'
+        default: 'stateful'
+      mt_response_id_field:
+        description: 'Multi-Turn Response ID Field'
         type: string
         required: false
+        default: 'id'
+      mt_request_id_field:
+        description: 'Multi-Turn Request ID Field'
+        type: string
+        required: false
+        default: 'previous_response_id'
+
+      # --- Rate Limit Configuration ---
+      rate_limit_enabled:
+        description: 'Enable Rate Limiting?'
+        type: choice
+        required: true
+        options:
+          - 'false'
+          - 'true'
+        default: 'false'
       target_rate_limit:
-        description: 'Target Rate Limit (Integer)'
+        description: 'Target Rate Limit'
         type: string
-        required: false
+        required: true
+        default: '100'
+
+      # --- Metadata ---
       target_background:
         description: 'Target Background (JSON)'
         type: string
@@ -113,9 +150,16 @@ jobs:
             ${{ inputs.request_json }}
           RESPONSE_JSON: |
             ${{ inputs.response_json }}
-          MULTI_TURN_CONFIG: |
-            ${{ inputs.multi_turn_config }}
+          
+          # Pass the new expanded inputs to Python
+          MT_ENABLED: "${{ inputs.mt_enabled }}"
+          MT_TYPE: "${{ inputs.mt_type }}"
+          MT_RESPONSE_ID_FIELD: "${{ inputs.mt_response_id_field }}"
+          MT_REQUEST_ID_FIELD: "${{ inputs.mt_request_id_field }}"
+          
+          RATE_LIMIT_ENABLED: "${{ inputs.rate_limit_enabled }}"
           TARGET_RATE_LIMIT: "${{ inputs.target_rate_limit }}"
+          
           TARGET_BACKGROUND: |
             ${{ inputs.target_background }}
           ADDITIONAL_CONTEXT: |
