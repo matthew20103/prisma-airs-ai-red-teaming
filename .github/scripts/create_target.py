@@ -18,7 +18,6 @@ def get_access_token():
     return resp.json().get("access_token")
 
 def parse_json_env(var_name, default=None):
-    """Safely parse JSON strings from GitHub Action environment variables."""
     val = os.environ.get(var_name, "").strip()
     if not val:
         return default
@@ -42,13 +41,26 @@ def main():
         print("Error: TARGET_NAME is required.")
         sys.exit(1)
 
-    # 1. Base Variables
+    # --- THE MAGIC MAPPING FIX ---
+    # Read the user's dropdown choice
+    ui_connection_choice = os.environ.get("CONNECTION_TYPE", "REST")
+    
+    # Map it exactly how the Prisma AIRS Web UI maps it behind the scenes
+    if ui_connection_choice in ["REST", "STREAMING"]:
+        api_connection_type = "CUSTOM"
+        api_response_mode = ui_connection_choice
+    else:
+        api_connection_type = ui_connection_choice
+        api_response_mode = "REST"
+
     session_supported = os.environ.get("SESSION_SUPPORTED", "false").lower() == "true"
 
+    # 1. Base Variables
     target_payload = {
         "name": target_name,
-        "target_type": os.environ.get("TARGET_TYPE", "AGENT"),
-        "connection_type": os.environ.get("CONNECTION_TYPE", "REST"),
+        "target_type": os.environ.get("TARGET_TYPE", "APPLICATION"),
+        "connection_type": api_connection_type,     # Now correctly sends "CUSTOM"
+        "response_mode": api_response_mode,         # Now correctly sends "REST" or "STREAMING"
         "api_endpoint_type": os.environ.get("API_ENDPOINT_TYPE", "PUBLIC"),
         "session_supported": session_supported,
         "connection_params": {
@@ -106,7 +118,7 @@ def main():
     existing_targets = list_resp.json().get("data", [])
     target_id = next((t.get("id") for t in existing_targets if t.get("name") == target_name), None)
 
-    # STRICT VALIDATION: Ensure Prisma AIRS actively pings the endpoint to verify connectivity
+    # STRICT VALIDATION IS ON!
     query_params = {"validate": "true"}
 
     print("\n--- DEBUG: Smart Payload being sent to Prisma AIRS ---")
