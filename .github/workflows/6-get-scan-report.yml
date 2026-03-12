@@ -1,0 +1,37 @@
+name: 6. Prisma AIRS - Get Scan Report
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      target_name:
+        description: 'Name of the Prisma AIRS Target'
+        required: true
+        type: string
+        default: 'my-ai-app-production' # Change this to your standard target name
+
+jobs:
+  fetch-reports:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Fetch Prisma AIRS Reports
+        env:
+          PRISMA_CLIENT_ID: ${{ secrets.PRISMA_CLIENT_ID }}
+          PRISMA_CLIENT_SECRET: ${{ secrets.PRISMA_CLIENT_SECRET }}
+          PRISMA_TSG_ID: ${{ secrets.PRISMA_TSG_ID }}
+          TARGET_NAME: ${{ github.event.inputs.target_name }}
+        run: python get_scan_report.py
