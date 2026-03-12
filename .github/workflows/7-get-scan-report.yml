@@ -1,4 +1,4 @@
-name: 6. Prisma AIRS - Get Scan Report
+name: 7. Prisma AIRS - Get Scan Report
 
 on:
   workflow_dispatch:
