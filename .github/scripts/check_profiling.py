@@ -11,6 +11,13 @@ TARGET_NAME = os.environ.get("TARGET_NAME")
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
 MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/mgmt-plane/v1"
 
+def write_summary(markdown_text):
+    """Writes output directly to the GitHub Actions Summary UI page."""
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with open(summary_path, "a", encoding="utf-8") as f:
+            f.write(markdown_text + "\n")
+
 def get_access_token():
     payload = {"grant_type": "client_credentials", "scope": f"tsg_id:{TSG_ID}"}
     resp = requests.post(AUTH_URL, data=payload, auth=(CLIENT_ID, CLIENT_SECRET))
@@ -63,8 +70,14 @@ def main():
     print(f"Current Profiling Status: {profiling_status}")
     print("-" * 50)
 
+    # --- Start writing to GitHub Actions Summary ---
+    write_summary(f"## 🔍 Prisma AIRS Profiling Status")
+    write_summary(f"**Target Name:** `{TARGET_NAME}`")
+    write_summary(f"**Target ID:** `{target_id}`\n")
+
     if profiling_status == "COMPLETED":
         print("✅ Profiling is complete! Here are the learned attributes based on the API Schema:\n")
+        write_summary(f"**Status:** `COMPLETED` ✅\n")
         
         # Look for the dynamic fields in both possible API responses
         other_details = prof_data.get("other_details") or target_data.get("other_details") or {}
@@ -72,29 +85,29 @@ def main():
         background = prof_data.get("target_background") or target_data.get("target_background") or {}
         context = prof_data.get("additional_context") or target_data.get("additional_context") or {}
 
-        # 1. Print the "System Capabilities" (other_details)
+        # 1. System Capabilities (other_details)
+        write_summary("### 🧠 System Capabilities")
         if other_details:
             print("--- SYSTEM CAPABILITIES (other_details) ---")
             print(json.dumps(other_details, indent=2, ensure_ascii=False))
             print("\n")
+            write_summary("```json\n" + json.dumps(other_details, indent=2, ensure_ascii=False) + "\n```")
         else:
             print("--- SYSTEM CAPABILITIES ---")
             print("No 'other_details' object found in the API response.\n")
+            write_summary("*No `other_details` object found in the API response.*")
 
-        # 2. Print AI Generated Fields list
+        # 2. AI Generated Fields list
         if ai_fields:
             print("--- AI GENERATED FIELDS ---")
             print(json.dumps(ai_fields, indent=2))
             print("\n")
+            write_summary("### ✨ AI Generated Fields")
+            write_summary("```json\n" + json.dumps(ai_fields, indent=2) + "\n```")
 
-        # 3. Print the Standard Contexts
+        # 3. Standard Contexts
         print("--- TARGET CONTEXT & BACKGROUND ---")
         print(json.dumps({"target_background": background, "additional_context": context}, indent=2, ensure_ascii=False))
         
-    elif profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"]:
-        print("⏳ Profiling is still running. Please check back later.")
-    else:
-        print(f"⚠️ Profiling ended with status: {profiling_status}")
-
-if __name__ == "__main__":
-    main()
+        write_summary("### 📂 Target Context & Background")
+        write_summary("
