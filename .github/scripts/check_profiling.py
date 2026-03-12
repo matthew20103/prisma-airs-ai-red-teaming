@@ -54,18 +54,19 @@ def main():
         prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profile", headers=headers)
     prof_data = prof_resp.json() if prof_resp.ok else {}
 
-    # Extract Fields for Table and Sections
+    # Extract Status
     profiling_status = str(prof_data.get("status") or target_data.get("profiling_status", "UNKNOWN")).upper()
-    other_details = prof_data.get("other_details") or target_data.get("other_details") or {}
     
+    # Extract Sections - Using .get() with fallback to empty dict
+    other_details = prof_data.get("other_details") or target_data.get("other_details") or {}
     background = prof_data.get("target_background") or target_data.get("target_background") or {}
     context = prof_data.get("additional_context") or target_data.get("additional_context") or {}
 
-    # Table Metrics
-    competitors = background.get("competitors", [])
-    languages = context.get("languages_supported", [])
-    banned_keywords = context.get("banned_keywords", [])
-    tools = context.get("tools_accessible", [])
+    # Table Metrics - Added "or []" to handle cases where the key exists but is null/None
+    competitors = background.get("competitors") or []
+    languages = context.get("languages_supported") or []
+    banned_keywords = context.get("banned_keywords") or []
+    tools = context.get("tools_accessible") or []
 
     # --- Build Summary Output ---
     summary_output = [
