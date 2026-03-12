@@ -23,10 +23,28 @@ def get_access_token():
     resp.raise_for_status()
     return resp.json().get("access_token")
 
-def parse_json_env(var_name, default=None):
+def parse_text_env(var_name, default=None):
+    """Parses plain text fields and drops them if an exclusion keyword is used."""
     val = os.environ.get(var_name, "").strip()
     if not val:
         return default
+        
+    # --- Intercept explicit exclusion keywords to skip the field ---
+    if val.upper() in ['NONE', 'NA', 'N/A', 'NULL', '-']:
+        return None
+        
+    return val
+
+def parse_json_env(var_name, default=None):
+    """Parses JSON fields and drops them if an exclusion keyword is used."""
+    val = os.environ.get(var_name, "").strip()
+    if not val:
+        return default
+    
+    # --- Intercept explicit exclusion keywords to skip the field ---
+    if val.upper() in ['NONE', 'NA', 'N/A', 'NULL', '-', '{}']:
+        return None
+        
     try:
         return json.loads(val)
     except json.JSONDecodeError as e:
@@ -74,11 +92,11 @@ def main():
     }
 
     # 2. String/Optional Fields
-    description = os.environ.get("DESCRIPTION", "").strip()
+    description = parse_text_env("DESCRIPTION")
     if description:
         target_payload["description"] = description
 
-    nb_uuid = os.environ.get("NB_CHANNEL_UUID", "").strip()
+    nb_uuid = parse_text_env("NB_CHANNEL_UUID")
     if nb_uuid and target_payload["api_endpoint_type"] == "NETWORK_BROKER":
         target_payload["network_broker_channel_uuid"] = nb_uuid
 
@@ -102,11 +120,11 @@ def main():
         target_payload["target_metadata"]["rate_limit"] = int(target_rate_limit) if target_rate_limit.isdigit() else 100
 
     # 5. Context blocks
-    target_bg = parse_json_env("TARGET_BACKGROUND")
+    target_bg = parse_text_env("TARGET_BACKGROUND")
     if target_bg:
         target_payload["target_background"] = target_bg
 
-    add_context = parse_json_env("ADDITIONAL_CONTEXT")
+    add_context = parse_text_env("ADDITIONAL_CONTEXT")
     if add_context:
         target_payload["additional_context"] = add_context
 
