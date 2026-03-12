@@ -55,68 +55,65 @@ def main():
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
     print(f"Found Target! ID: {target_id}")
 
-    # 1. Fetch deep dive details (Base configuration)
     details_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers)
     target_data = details_resp.json() if details_resp.ok else {}
     
-    # 2. Fetch the Profiling Data
     print("Fetching deep profiling data from API...\n")
     prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
     
-    # Fallback: Sometimes APIs use /profile instead of /profiling for GET requests
     if prof_resp.status_code == 404:
         prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profile", headers=headers)
         
     prof_data = prof_resp.json() if prof_resp.ok else {}
 
-    # Determine Status
-    profiling_status = prof_data.get("status") or target_data.get("profiling_status", "UNKNOWN")
-    profiling_status = str(profiling_status).upper()
+    profiling_status = str(prof_data.get("status") or target_data.get("profiling_status", "UNKNOWN")).upper()
 
-    print(f"Current Profiling Status: {profiling_status}")
-    print("-" * 50)
-
-    # Status Icon logic
-    status_icon = "✅" if profiling_status == "COMPLETED" else "⏳"
-
-    # --- Initialize GitHub Job Summary Output ---
+    # --- Prepare Markdown Summary ---
     summary_output = [
         f"## 🔍 Prisma AIRS Profiling Report: `{TARGET_NAME}`",
         f"**Target ID:** `{target_id}`",
-        "",
-        "### 📊 Profiling Overview",
-        "| Metric | Detail |",
-        "| :--- | :--- |",
-        f"| **Status** | {status_icon} {profiling_status} |"
+        ""
     ]
 
+    # Status Emoji mapping
+    status_emoji = "✅" if profiling_status == "COMPLETED" else "⏳" if profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"] else "⚠️"
+
+    # --- 1. Summary Table Section ---
+    other_details = prof_data.get("other_details") or target_data.get("other_details") or {}
+    ai_fields = prof_data.get("ai_generated_fields") or target_data.get("ai_generated_fields") or []
+    
+    summary_output.append("### 📊 Workflow Execution Summary")
+    summary_output.append("| Metric | Value |")
+    summary_output.append("| :--- | :--- |")
+    summary_output.append(f"| **Status** | {status_emoji} {profiling_status} |")
+    summary_output.append(f"| **System Capabilities Found** | {len(other_details)} |")
+    summary_output.append(f"| **AI Generated Fields** | {len(ai_fields)} |")
+    summary_output.append(f"| **Target Name** | `{TARGET_NAME}` |")
+    summary_output.append("")
+
+    # --- 2. Detailed Breakdown ---
     if profiling_status == "COMPLETED":
-        print("✅ Profiling is complete! Preparing summary...\n")
+        summary_output.append("### 🛠️ Detailed Profiling Attributes")
         
-        # Look for dynamic fields
-        other_details = prof_data.get("other_details") or target_data.get("other_details") or {}
-        ai_fields = prof_data.get("ai_generated_fields") or target_data.get("ai_generated_fields") or []
-        background = prof_data.get("target_background") or target_data.get("target_background") or {}
-        context = prof_data.get("additional_context") or target_data.get("additional_context") or {}
-
-        # Add metric counts to the overview table
-        summary_output.append(f"| **System Capabilities Found** | {len(other_details)} |")
-        summary_output.append(f"| **AI Generated Fields** | {len(ai_fields)} |")
-        summary_output.append("")
-        summary_output.append("The profiling process has successfully mapped the following attributes:\n")
-
-        # 1. System Capabilities
+        # System Capabilities
         summary_output.append("#### ⚙️ System Capabilities")
         if other_details:
-            summary_output.append("<details><summary>Click to view system details</summary>\n\n```json\n" + json.dumps(other_details, indent=2, ensure_ascii=False) + "\n```\n</details>")
+            summary_output.append("```json\n" + json.dumps(other_details, indent=2, ensure_ascii=False) + "\n```")
         else:
-            summary_output.append("*No 'other_details' object found.*")
+            summary_output.append("*No capabilities found.*")
 
-        # 2. AI Generated Fields
+        # AI Fields
         if ai_fields:
             summary_output.append("#### 🧠 AI Generated Fields")
-            summary_output.append("<details><summary>Click to view fields</summary>\n\n```json\n" + json.dumps(ai_fields, indent=2) + "\n```\n</details>")
+            summary_output.append("```json\n" + json.dumps(ai_fields, indent=2) + "\n```")
 
-        # 3. Standard Contexts
-        summary_output.append("#### 📂 Target Context & Background")
-        summary_output.append("<details><summary>Click to view background details</summary>\n\n
+    elif profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"]:
+        summary_output.append("> ⏳ **Notice:** Profiling is currently in progress. Detailed attributes will be available once the scan completes.")
+    else:
+        summary_output.append(f"> ⚠️ **Warning:** Profiling ended with an unexpected status: {profiling_status}")
+
+    # Write to GitHub
+    write_to_summary("\n".join(summary_output))
+
+if __name__ == "__main__":
+    main()
