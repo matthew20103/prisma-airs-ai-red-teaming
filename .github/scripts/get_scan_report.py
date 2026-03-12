@@ -6,11 +6,12 @@ import json
 CLIENT_ID = os.environ.get("PRISMA_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("PRISMA_CLIENT_SECRET")
 TSG_ID = os.environ.get("PRISMA_TSG_ID")
-TARGET_NAME = os.environ.get("TARGET_NAME")
+
+# We now need the specific Job IDs from the previous scan steps
+ATTACK_JOB_ID = os.environ.get("ATTACK_JOB_ID")
+AGENT_JOB_ID = os.environ.get("AGENT_JOB_ID")
 
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
-# Split into Management Plane and Data Plane URLs
-MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/mgmt-plane/v1"
 DATA_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/data-plane/v1"
 
 def write_to_summary(markdown_text):
@@ -26,76 +27,52 @@ def get_access_token():
     resp.raise_for_status()
     return resp.json().get("access_token")
 
+def fetch_report(job_id, endpoint_path, report_title):
+    """Helper function to fetch a report and append it to the summary."""
+    if not job_id:
+        msg = f"⚠️ Skipped {report_title}: No Job ID provided."
+        print(msg)
+        write_to_summary(f"### {report_title}\n{msg}")
+        return
+
+    print(f"\nFetching {report_title} using Job ID: {job_id}...")
+    headers = {"Authorization": f"Bearer {get_access_token()}", "Accept": "application/json"}
+    url = f"{DATA_BASE_URL}{endpoint_path.replace(':job_id', job_id)}"
+    
+    resp = requests.get(url, headers=headers)
+    
+    if resp.ok:
+        report_data = resp.json()
+        print(f"✅ Successfully fetched {report_title}.")
+        write_to_summary(f"### ✅ {report_title}\n**Job ID:** `{job_id}`")
+        write_to_summary("```json\n" + json.dumps(report_data, indent=2) + "\n```")
+    else:
+        print(f"❌ Failed to fetch {report_title}: {resp.status_code} - {resp.text}")
+        write_to_summary(f"### ❌ {report_title} Failed\n**Job ID:** `{job_id}`\n**Status Code:** {resp.status_code}\n```json\n{resp.text}\n```")
+
 def main():
     print("Generating OAuth 2.0 Access Token...")
     try:
-        headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
+        # Just validating authentication works before proceeding
+        get_access_token() 
     except Exception as e:
         error_msg = f"Authentication failed: {e}"
         print(error_msg)
-        write_to_summary(f"### ❌ Prisma AIRS Reports Failed\n**Error:** {error_msg}")
+        write_to_summary(f"## ❌ Prisma AIRS Reports Failed\n**Error:** {error_msg}")
         sys.exit(1)
 
-    # 1. Resolve Target ID using the Management Plane
-    print(f"Searching for target: '{TARGET_NAME}'...")
-    list_resp = requests.get(f"{MGMT_BASE_URL}/target", headers=headers)
-    
-    if not list_resp.ok:
-        error_msg = f"Failed to list targets: {list_resp.text}"
-        print(error_msg)
-        write_to_summary(f"### ❌ Prisma AIRS Reports Failed\n**Error:** {error_msg}")
-        sys.exit(1)
+    write_to_summary("## 🛡️ Prisma AIRS Security Reports")
 
-    existing_targets = list_resp.json().get("data", [])
-    target_obj = next((t for t in existing_targets if t.get("name") == TARGET_NAME), None)
+    # 1. Fetch Attack Library Report (Static)
+    # Using the exact endpoint path you provided
+    fetch_report(ATTACK_JOB_ID, "/report/static/:job_id/report", "📚 Attack Library Report")
 
-    if not target_obj:
-        error_msg = f"Error: Could not find a target named '{TARGET_NAME}'."
-        print(error_msg)
-        write_to_summary(f"### ❌ Target Not Found\n**Error:** {error_msg}")
-        sys.exit(1)
+    # 2. Fetch Agent Scan Report
+    # NOTE: You will need to verify the exact path for the agent scan in your API docs
+    # I am using "/report/dynamic/:job_id/report" as an educated placeholder
+    fetch_report(AGENT_JOB_ID, "/report/dynamic/:job_id/report", "🔬 Agent Scan Report")
 
-    target_id = target_obj.get("target_id") or target_obj.get("uuid") or target_obj.get("id")
-    print(f"✅ Found Target! ID: {target_id}")
-
-    # --- Initialize GitHub Job Summary Output ---
-    summary_output = [
-        f"## 🛡️ Prisma AIRS Security Reports: `{TARGET_NAME}`",
-        f"**Target ID:** `{target_id}`",
-        ""
-    ]
-
-    # 2. Feature: Get Attack Library Report (Data Plane)
-    attack_lib_endpoint = f"{DATA_BASE_URL}/target/{target_id}/attack-library"
-    print(f"\nFetching Attack Library Report from {attack_lib_endpoint}...")
-    attack_resp = requests.get(attack_lib_endpoint, headers=headers)
-
-    summary_output.append("### 📚 Attack Library Report")
-    if attack_resp.ok:
-        attack_data = attack_resp.json()
-        print("Successfully fetched Attack Library.")
-        summary_output.append("```json\n" + json.dumps(attack_data, indent=2) + "\n```")
-    else:
-        print(f"⚠️ Failed to fetch Attack Library: {attack_resp.status_code} - {attack_resp.text}")
-        summary_output.append(f"**Status:** ⚠️ Failed ({attack_resp.status_code})\n```text\n{attack_resp.text}\n```")
-
-    # 3. Feature: Get Agent Scan Report (Data Plane)
-    scan_endpoint = f"{DATA_BASE_URL}/target/{target_id}/agent-scan"
-    print(f"\nFetching Agent Scan Report from {scan_endpoint}...")
-    scan_resp = requests.get(scan_endpoint, headers=headers)
-
-    summary_output.append("### 🔬 Agent Scan Report")
-    if scan_resp.ok:
-        scan_data = scan_resp.json()
-        print("Successfully fetched Agent Scan Report.")
-        summary_output.append("```json\n" + json.dumps(scan_data, indent=2) + "\n```")
-    else:
-        print(f"⚠️ Failed to fetch Agent Scan Report: {scan_resp.status_code} - {scan_resp.text}")
-        summary_output.append(f"**Status:** ⚠️ Failed ({scan_resp.status_code})\n```text\n{scan_resp.text}\n```")
-
-    # Write the compiled summary out to GitHub Actions
-    write_to_summary("\n".join(summary_output))
-    print("\n✅ Reports processed and written to GitHub Job Summary.")
+    print("\n✅ Script execution complete.")
 
 if __name__ == "__main__":
     main()
