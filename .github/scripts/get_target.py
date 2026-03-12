@@ -51,13 +51,7 @@ def main():
 
     if not target_obj:
         print(f"Error: Could not find a target named '{TARGET_NAME}'.")
-        print("Available targets are:")
-        
-        # Build a list of available targets for both console and summary
         available_list = [f"* {t.get('name')}" for t in existing_targets]
-        for t in available_list:
-            print(f" - {t.replace('* ', '')}")
-            
         summary_error = [
             f"### ❌ Target Not Found: `{TARGET_NAME}`",
             "**Available targets are:**",
@@ -66,21 +60,40 @@ def main():
         write_to_summary("\n".join(summary_error))
         sys.exit(1)
 
-    print("\n✅ Found the target in the list! Here is the raw configuration data:")
-    print("--------------------------------------------------")
-    raw_config_json = json.dumps(target_obj, indent=2)
-    print(raw_config_json)
-    print("--------------------------------------------------")
+    # Prepare data for the table
+    uuid = target_obj.get("uuid") or "N/A"
+    status = target_obj.get("status") or "UNKNOWN"
+    t_type = target_obj.get("target_type") or "N/A"
+    endpoint_type = target_obj.get("api_endpoint_type") or "N/A"
+    created_at = target_obj.get("created_at") or "N/A"
+    
+    # Choose a status icon
+    status_icon = "🟢" if status.upper() == "ACTIVE" else "🟡"
 
-    # --- Initialize GitHub Job Summary Output for Success ---
+    raw_config_json = json.dumps(target_obj, indent=2)
+
+    # --- Initialize GitHub Job Summary Output ---
     summary_output = [
         f"## 🎯 Prisma AIRS Target Details: `{TARGET_NAME}`",
         "### ✅ Target Found",
-        "#### Raw Configuration Data",
-        "```json\n" + raw_config_json + "\n```"
+        "#### 📊 Target Overview",
+        "| Property | Value |",
+        "| :--- | :--- |",
+        f"| **UUID** | `{uuid}` |",
+        f"| **Status** | {status_icon} {status} |",
+        f"| **Target Type** | {t_type} |",
+        f"| **Endpoint Type** | {endpoint_type} |",
+        f"| **Created At** | {created_at} |",
+        "",
+        "#### 📄 Raw Configuration Data",
+        "<details><summary>Click to expand raw JSON</summary>",
+        "",
+        "```json\n" + raw_config_json + "\n```",
+        "</details>",
+        ""
     ]
 
-    # 3. Try to get deep-dive details (checking common ID fields)
+    # 3. Try to get deep-dive details
     target_id = target_obj.get("target_id") or target_obj.get("uuid") or target_obj.get("id")
 
     if target_id:
@@ -88,27 +101,17 @@ def main():
         details_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers)
         
         if details_resp.ok:
-            print("==================================================")
-            print(f" FULL DEEP-DIVE CONFIGURATION FOR: {TARGET_NAME}")
-            print("==================================================")
             deep_dive_json = json.dumps(details_resp.json(), indent=2)
-            print(deep_dive_json)
-            print("==================================================")
-            
-            # Append deep-dive data to the summary
             summary_output.append("#### 🔎 Full Deep-Dive Configuration")
-            summary_output.append("```json\n" + deep_dive_json + "\n```")
+            summary_output.append("<details><summary>Click to expand deep-dive JSON</summary>")
+            summary_output.append("\n```json\n" + deep_dive_json + "\n```")
+            summary_output.append("</details>")
         else:
-            error_msg = f"Failed to fetch details: {details_resp.text}"
-            print(error_msg)
-            summary_output.append("#### ⚠️ Deep-Dive Fetch Failed")
-            summary_output.append(f"**Error:** {error_msg}")
+            summary_output.append(f"#### ⚠️ Deep-Dive Fetch Failed\n**Error:** {details_resp.text}")
     else:
-        warning_msg = "Could not find an ID field to fetch deeper details, but the list data above should have what we need!"
-        print(f"\n⚠️ Warning: {warning_msg}")
-        summary_output.append(f"#### ⚠️ Warning\n{warning_msg}")
+        summary_output.append(f"#### ⚠️ Warning\nCould not find a unique ID for deep-dive fetch.")
 
-    # Write the compiled success summary out to GitHub Actions
+    # Write the compiled success summary
     write_to_summary("\n".join(summary_output))
 
 if __name__ == "__main__":
