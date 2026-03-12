@@ -9,7 +9,9 @@ TSG_ID = os.environ.get("PRISMA_TSG_ID")
 TARGET_NAME = os.environ.get("TARGET_NAME")
 
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
+# Split into Management Plane and Data Plane URLs
 MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/mgmt-plane/v1"
+DATA_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/data-plane/v1"
 
 def write_to_summary(markdown_text):
     """Appends Markdown content to the GitHub Actions Job Summary."""
@@ -34,7 +36,7 @@ def main():
         write_to_summary(f"### ❌ Prisma AIRS Reports Failed\n**Error:** {error_msg}")
         sys.exit(1)
 
-    # 1. Resolve Target ID
+    # 1. Resolve Target ID using the Management Plane
     print(f"Searching for target: '{TARGET_NAME}'...")
     list_resp = requests.get(f"{MGMT_BASE_URL}/target", headers=headers)
     
@@ -63,9 +65,8 @@ def main():
         ""
     ]
 
-    # 2. Feature: Get Attack Library Report
-    # NOTE: Adjust this endpoint if the Prisma AIRS API uses a different path for the attack library
-    attack_lib_endpoint = f"{MGMT_BASE_URL}/target/{target_id}/attack-library"
+    # 2. Feature: Get Attack Library Report (Data Plane)
+    attack_lib_endpoint = f"{DATA_BASE_URL}/target/{target_id}/attack-library"
     print(f"\nFetching Attack Library Report from {attack_lib_endpoint}...")
     attack_resp = requests.get(attack_lib_endpoint, headers=headers)
 
@@ -78,9 +79,8 @@ def main():
         print(f"⚠️ Failed to fetch Attack Library: {attack_resp.status_code} - {attack_resp.text}")
         summary_output.append(f"**Status:** ⚠️ Failed ({attack_resp.status_code})\n```text\n{attack_resp.text}\n```")
 
-    # 3. Feature: Get Agent Scan Report
-    # NOTE: Adjust this endpoint if the Prisma AIRS API uses a different path for agent scans
-    scan_endpoint = f"{MGMT_BASE_URL}/target/{target_id}/agent-scan"
+    # 3. Feature: Get Agent Scan Report (Data Plane)
+    scan_endpoint = f"{DATA_BASE_URL}/target/{target_id}/agent-scan"
     print(f"\nFetching Agent Scan Report from {scan_endpoint}...")
     scan_resp = requests.get(scan_endpoint, headers=headers)
 
