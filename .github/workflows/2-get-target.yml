@@ -1,4 +1,4 @@
-name: 3. Prisma AIRS - Get Target Details
+name: 2. Prisma AIRS - Get Target Details
 
 on:
   workflow_dispatch:
