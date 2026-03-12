@@ -77,8 +77,9 @@ def main():
     print("-" * 50)
 
     # --- Initialize GitHub Job Summary Output ---
+    # Added the magnifying glass icon here!
     summary_output = [
-        f"## Prisma AIRS Profiling Report: `{TARGET_NAME}`",
+        f"## 🔍 Prisma AIRS Profiling Report: `{TARGET_NAME}`",
         f"**Target ID:** `{target_id}`",
         ""
     ]
