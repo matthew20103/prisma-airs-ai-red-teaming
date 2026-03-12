@@ -34,4 +34,4 @@ jobs:
           PRISMA_CLIENT_SECRET: ${{ secrets.PRISMA_CLIENT_SECRET }}
           PRISMA_TSG_ID: ${{ secrets.PRISMA_TSG_ID }}
           TARGET_NAME: ${{ github.event.inputs.target_name }}
-        run: python get_scan_report.py
+        run: python .github/scripts/get_scan_report.py
