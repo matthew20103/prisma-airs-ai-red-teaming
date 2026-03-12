@@ -89,9 +89,9 @@ def main():
             summary_output.append("|---|---|---|---|")
             
             for scan in target_scans:
-                # Map fields dynamically based on common Prisma AIRS JSON structures
+                # Map fields dynamically - now prioritizing "job_type"
                 s_id = scan.get("job_id") or scan.get("scan_id") or scan.get("id") or scan.get("uuid") or "N/A"
-                s_type = scan.get("scan_type") or scan.get("type") or "Unknown"
+                s_type = scan.get("job_type") or scan.get("scan_type") or scan.get("type") or "Unknown"
                 s_status = scan.get("status") or scan.get("state") or "Unknown"
                 s_date = scan.get("created_at") or scan.get("start_time") or scan.get("timestamp") or "N/A"
                 
