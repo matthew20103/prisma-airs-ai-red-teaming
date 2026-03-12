@@ -46,10 +46,11 @@ def main():
 
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
 
-    # Fetch Data
+    # 1. Fetch deep dive details
     details_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers)
     target_data = details_resp.json() if details_resp.ok else {}
     
+    # 2. Fetch profiling data
     prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
     if prof_resp.status_code == 404:
         prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profile", headers=headers)
@@ -68,7 +69,6 @@ def main():
         ""
     ]
 
-    # Status Emoji
     status_emoji = "✅" if profiling_status == "COMPLETED" else "⏳" if profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"] else "⚠️"
 
     # --- 1. Target Profiling Summary Table ---
@@ -94,12 +94,19 @@ def main():
         summary_output.append("#### 🧠 AI Generated Fields")
         summary_output.append("```json\n" + json.dumps(ai_fields, indent=2) + "\n```")
 
-    # --- 3. Raw Response Section ---
+    # --- 3. THE RAW RESPONSE (Restored) ---
     summary_output.append("---")
-    summary_output.append("### 📄 Raw API Response")
-    summary_output.append("<details><summary>Click to expand raw JSON</summary>")
-    summary_output.append("\n```json\n" + json.dumps(prof_data, indent=2) + "\n```\n")
+    summary_output.append("### 📄 Raw API Response Output")
+    summary_output.append("Below is the full JSON response received from the Prisma AIRS API:")
+    # Using a collapsible section so the page stays clean but the data is always there
+    summary_output.append("<details>")
+    summary_output.append("<summary><b>Click to View Full Raw JSON</b></summary>")
+    summary_output.append("\n```json\n" + json.dumps(prof_data, indent=2, ensure_ascii=False) + "\n```\n")
     summary_output.append("</details>")
+
+    # Also printing to console log as per your original code
+    print("--- RAW API RESPONSE ---")
+    print(json.dumps(prof_data, indent=2))
 
     write_to_summary("\n".join(summary_output))
 
