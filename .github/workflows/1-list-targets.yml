@@ -1,4 +1,4 @@
-name: 5. Prisma AIRS - List All Targets
+name: 1. Prisma AIRS - List All Targets
 
 on:
   workflow_dispatch:
