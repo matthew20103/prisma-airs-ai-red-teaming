@@ -7,7 +7,6 @@ CLIENT_ID = os.environ.get("PRISMA_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("PRISMA_CLIENT_SECRET")
 TSG_ID = os.environ.get("PRISMA_TSG_ID")
 
-# We now need the specific Job IDs from the previous scan steps
 ATTACK_JOB_ID = os.environ.get("ATTACK_JOB_ID")
 AGENT_JOB_ID = os.environ.get("AGENT_JOB_ID")
 
@@ -27,33 +26,45 @@ def get_access_token():
     resp.raise_for_status()
     return resp.json().get("access_token")
 
-def fetch_report(job_id, endpoint_path, report_title):
-    """Helper function to fetch a report and append it to the summary."""
+def fetch_scan_and_remediation(job_id, base_endpoint, title):
+    """Helper to fetch both the report and the remediation data."""
     if not job_id:
-        msg = f"⚠️ Skipped {report_title}: No Job ID provided."
+        msg = f"⚠️ Skipped {title}: No Job ID provided."
         print(msg)
-        write_to_summary(f"### {report_title}\n{msg}")
+        write_to_summary(f"### {title}\n{msg}")
         return
 
-    print(f"\nFetching {report_title} using Job ID: {job_id}...")
     headers = {"Authorization": f"Bearer {get_access_token()}", "Accept": "application/json"}
-    url = f"{DATA_BASE_URL}{endpoint_path.replace(':job_id', job_id)}"
+    base_url = f"{DATA_BASE_URL}{base_endpoint.replace(':job_id', job_id)}"
     
-    resp = requests.get(url, headers=headers)
+    write_to_summary(f"### {title}\n**Job ID:** `{job_id}`")
+
+    # 1. Fetch the Scan Report
+    print(f"\nFetching {title} (Report) using Job ID: {job_id}...")
+    report_resp = requests.get(f"{base_url}/report", headers=headers)
     
-    if resp.ok:
-        report_data = resp.json()
-        print(f"✅ Successfully fetched {report_title}.")
-        write_to_summary(f"### ✅ {report_title}\n**Job ID:** `{job_id}`")
-        write_to_summary("```json\n" + json.dumps(report_data, indent=2) + "\n```")
+    if report_resp.ok:
+        print(f"✅ Successfully fetched {title} Report.")
+        write_to_summary("#### 📊 Scan Report\n```json\n" + json.dumps(report_resp.json(), indent=2) + "\n```")
     else:
-        print(f"❌ Failed to fetch {report_title}: {resp.status_code} - {resp.text}")
-        write_to_summary(f"### ❌ {report_title} Failed\n**Job ID:** `{job_id}`\n**Status Code:** {resp.status_code}\n```json\n{resp.text}\n```")
+        print(f"❌ Failed to fetch {title} Report: {report_resp.status_code}")
+        write_to_summary(f"#### ❌ Scan Report Failed\n**Status Code:** {report_resp.status_code}\n```json\n{report_resp.text}\n```")
+
+    # 2. Fetch the Remediation Data
+    print(f"Fetching {title} (Remediation) using Job ID: {job_id}...")
+    rem_resp = requests.get(f"{base_url}/remediation", headers=headers)
+    
+    if rem_resp.ok:
+        print(f"✅ Successfully fetched {title} Remediation.")
+        write_to_summary("#### 🛠️ Remediation Guidelines\n```json\n" + json.dumps(rem_resp.json(), indent=2) + "\n```")
+    else:
+        print(f"❌ Failed to fetch {title} Remediation: {rem_resp.status_code}")
+        write_to_summary(f"#### ❌ Remediation Failed\n**Status Code:** {rem_resp.status_code}\n```json\n{rem_resp.text}\n```")
 
 def main():
     print("Generating OAuth 2.0 Access Token...")
     try:
-        # Just validating authentication works before proceeding
+        # Validate authentication works before proceeding
         get_access_token() 
     except Exception as e:
         error_msg = f"Authentication failed: {e}"
@@ -61,16 +72,13 @@ def main():
         write_to_summary(f"## ❌ Prisma AIRS Reports Failed\n**Error:** {error_msg}")
         sys.exit(1)
 
-    write_to_summary("## 🛡️ Prisma AIRS Security Reports")
+    write_to_summary("## 🛡️ Prisma AIRS Security Reports & Remediation")
 
-    # 1. Fetch Attack Library Report (Static)
-    # Using the exact endpoint path you provided
-    fetch_report(ATTACK_JOB_ID, "/report/static/:job_id/report", "📚 Attack Library Report")
+    # Fetch Attack Library Report & Remediation (Static)
+    fetch_scan_and_remediation(ATTACK_JOB_ID, "/report/static/:job_id", "📚 Attack Library")
 
-    # 2. Fetch Agent Scan Report
-    # NOTE: You will need to verify the exact path for the agent scan in your API docs
-    # I am using "/report/dynamic/:job_id/report" as an educated placeholder
-    fetch_report(AGENT_JOB_ID, "/report/dynamic/:job_id/report", "🔬 Agent Scan Report")
+    # Fetch Agent Scan Report & Remediation (Dynamic)
+    fetch_scan_and_remediation(AGENT_JOB_ID, "/report/dynamic/:job_id", "🔬 Agent Scan")
 
     print("\n✅ Script execution complete.")
 
