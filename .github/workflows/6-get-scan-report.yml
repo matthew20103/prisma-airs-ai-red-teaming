@@ -37,4 +37,4 @@ jobs:
           PRISMA_TSG_ID: ${{ secrets.PRISMA_TSG_ID }}
           ATTACK_JOB_ID: ${{ github.event.inputs.attack_job_id }}
           AGENT_JOB_ID: ${{ github.event.inputs.agent_job_id }}
-        run: python get_scan_report.py
+        run: python .github/scripts/get_scan_report.py
