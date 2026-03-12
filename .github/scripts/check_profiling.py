@@ -11,11 +11,11 @@ TARGET_NAME = os.environ.get("TARGET_NAME")
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
 MGMT_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/mgmt-plane/v1"
 
-def write_summary(markdown_text):
-    """Writes output directly to the GitHub Actions Summary UI page."""
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary_path:
-        with open(summary_path, "a", encoding="utf-8") as f:
+def write_to_summary(markdown_text):
+    """Appends Markdown content to the GitHub Actions Job Summary."""
+    summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_file:
+        with open(summary_file, "a", encoding="utf-8") as f:
             f.write(markdown_text + "\n")
 
 def get_access_token():
@@ -29,21 +29,27 @@ def main():
     try:
         headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
     except Exception as e:
-        print(f"Authentication failed: {e}")
+        error_msg = f"Authentication failed: {e}"
+        print(error_msg)
+        write_to_summary(f"### ❌ Prisma AIRS Profiling Failed\n**Error:** {error_msg}")
         sys.exit(1)
 
     print(f"Searching for target: '{TARGET_NAME}'...")
     list_resp = requests.get(f"{MGMT_BASE_URL}/target", headers=headers)
     
     if not list_resp.ok:
-        print(f"Failed to list targets: {list_resp.text}")
+        error_msg = f"Failed to list targets: {list_resp.text}"
+        print(error_msg)
+        write_to_summary(f"### ❌ Prisma AIRS Profiling Failed\n**Error:** {error_msg}")
         sys.exit(1)
 
     existing_targets = list_resp.json().get("data", [])
     target_obj = next((t for t in existing_targets if t.get("name") == TARGET_NAME), None)
 
     if not target_obj:
-        print(f"Error: Could not find a target named '{TARGET_NAME}'.")
+        error_msg = f"Error: Could not find a target named '{TARGET_NAME}'."
+        print(error_msg)
+        write_to_summary(f"### ❌ Prisma AIRS Profiling Failed\n**Error:** {error_msg}")
         sys.exit(1)
 
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
@@ -70,44 +76,62 @@ def main():
     print(f"Current Profiling Status: {profiling_status}")
     print("-" * 50)
 
-    # --- Start writing to GitHub Actions Summary ---
-    write_summary(f"## 🔍 Prisma AIRS Profiling Status")
-    write_summary(f"**Target Name:** `{TARGET_NAME}`")
-    write_summary(f"**Target ID:** `{target_id}`\n")
+    # --- Initialize GitHub Job Summary Output ---
+    summary_output = [
+        f"## Prisma AIRS Profiling Report: `{TARGET_NAME}`",
+        f"**Target ID:** `{target_id}`",
+        ""
+    ]
 
     if profiling_status == "COMPLETED":
         print("✅ Profiling is complete! Here are the learned attributes based on the API Schema:\n")
-        write_summary(f"**Status:** `COMPLETED` ✅\n")
+        summary_output.append(f"### Status: ✅ {profiling_status}")
+        summary_output.append("The profiling process has successfully mapped the following attributes:\n")
         
-        # Look for the dynamic fields in both possible API responses
+        # Look for dynamic fields
         other_details = prof_data.get("other_details") or target_data.get("other_details") or {}
         ai_fields = prof_data.get("ai_generated_fields") or target_data.get("ai_generated_fields") or []
         background = prof_data.get("target_background") or target_data.get("target_background") or {}
         context = prof_data.get("additional_context") or target_data.get("additional_context") or {}
 
-        # 1. System Capabilities (other_details)
-        write_summary("### 🧠 System Capabilities")
+        # 1. System Capabilities
+        print("--- SYSTEM CAPABILITIES (other_details) ---")
+        summary_output.append("#### ⚙️ System Capabilities")
         if other_details:
-            print("--- SYSTEM CAPABILITIES (other_details) ---")
-            print(json.dumps(other_details, indent=2, ensure_ascii=False))
-            print("\n")
-            write_summary("```json\n" + json.dumps(other_details, indent=2, ensure_ascii=False) + "\n```")
+            details_json = json.dumps(other_details, indent=2, ensure_ascii=False)
+            print(details_json + "\n")
+            summary_output.append("```json\n" + details_json + "\n```")
         else:
-            print("--- SYSTEM CAPABILITIES ---")
             print("No 'other_details' object found in the API response.\n")
-            write_summary("*No `other_details` object found in the API response.*")
+            summary_output.append("*No 'other_details' object found.*")
 
-        # 2. AI Generated Fields list
+        # 2. AI Generated Fields
         if ai_fields:
             print("--- AI GENERATED FIELDS ---")
-            print(json.dumps(ai_fields, indent=2))
-            print("\n")
-            write_summary("### ✨ AI Generated Fields")
-            write_summary("```json\n" + json.dumps(ai_fields, indent=2) + "\n```")
+            ai_json = json.dumps(ai_fields, indent=2)
+            print(ai_json + "\n")
+            summary_output.append("#### 🧠 AI Generated Fields")
+            summary_output.append("```json\n" + ai_json + "\n```")
 
         # 3. Standard Contexts
         print("--- TARGET CONTEXT & BACKGROUND ---")
-        print(json.dumps({"target_background": background, "additional_context": context}, indent=2, ensure_ascii=False))
-        
-        write_summary("### 📂 Target Context & Background")
-        write_summary("
+        context_json = json.dumps({"target_background": background, "additional_context": context}, indent=2, ensure_ascii=False)
+        print(context_json)
+        summary_output.append("#### 📂 Target Context & Background")
+        summary_output.append("```json\n" + context_json + "\n```")
+
+    elif profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"]:
+        msg = "⏳ Profiling is still running. Please check back later."
+        print(msg)
+        summary_output.append(f"### Status: ⏳ {profiling_status}")
+        summary_output.append(msg)
+    else:
+        msg = f"⚠️ Profiling ended with status: {profiling_status}"
+        print(msg)
+        summary_output.append(f"### Status: ⚠️ {profiling_status}")
+
+    # Write the compiled summary out to GitHub Actions
+    write_to_summary("\n".join(summary_output))
+
+if __name__ == "__main__":
+    main()
