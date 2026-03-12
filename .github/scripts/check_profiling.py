@@ -25,53 +25,64 @@ def get_access_token():
     return resp.json().get("access_token")
 
 def main():
+    print("Generating OAuth 2.0 Access Token...")
     try:
         headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
     except Exception as e:
-        write_to_summary(f"### ❌ Prisma AIRS Profiling Failed\n**Error:** {e}")
+        error_msg = f"Authentication failed: {e}"
+        print(error_msg)
+        write_to_summary(f"### ❌ Prisma AIRS Profiling Failed\n**Error:** {error_msg}")
         sys.exit(1)
 
-    # Search for target
+    print(f"Searching for target: '{TARGET_NAME}'...")
     list_resp = requests.get(f"{MGMT_BASE_URL}/target", headers=headers)
+    
     if not list_resp.ok:
-        write_to_summary(f"### ❌ Prisma AIRS Profiling Failed\n**Error:** {list_resp.text}")
+        error_msg = f"Failed to list targets: {list_resp.text}"
+        print(error_msg)
+        write_to_summary(f"### ❌ Prisma AIRS Profiling Failed\n**Error:** {error_msg}")
         sys.exit(1)
 
     existing_targets = list_resp.json().get("data", [])
     target_obj = next((t for t in existing_targets if t.get("name") == TARGET_NAME), None)
 
     if not target_obj:
-        write_to_summary(f"### ❌ Prisma AIRS Profiling Failed\n**Error:** Target '{TARGET_NAME}' not found.")
+        error_msg = f"Error: Could not find a target named '{TARGET_NAME}'."
+        print(error_msg)
+        write_to_summary(f"### ❌ Prisma AIRS Profiling Failed\n**Error:** {error_msg}")
         sys.exit(1)
 
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
+    print(f"Found Target! ID: {target_id}")
 
     # 1. Fetch deep dive details
     details_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers)
     target_data = details_resp.json() if details_resp.ok else {}
     
     # 2. Fetch profiling data
+    print("Fetching deep profiling data from API...\n")
     prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profiling", headers=headers)
+    
     if prof_resp.status_code == 404:
         prof_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}/profile", headers=headers)
         
     prof_data = prof_resp.json() if prof_resp.ok else {}
 
-    # Extract Status and Fields
+    # Extract Data for Table
     profiling_status = str(prof_data.get("status") or target_data.get("profiling_status", "UNKNOWN")).upper()
     other_details = prof_data.get("other_details") or target_data.get("other_details") or {}
     ai_fields = prof_data.get("ai_generated_fields") or target_data.get("ai_generated_fields") or []
 
-    # --- Build GitHub Summary ---
+    # --- Initialize GitHub Job Summary Output ---
     summary_output = [
         f"## 🔍 Prisma AIRS Profiling Report: `{TARGET_NAME}`",
         f"**Target ID:** `{target_id}`",
         ""
     ]
 
-    status_emoji = "✅" if profiling_status == "COMPLETED" else "⏳" if profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"] else "⚠️"
-
     # --- 1. Target Profiling Summary Table ---
+    status_emoji = "✅" if profiling_status == "COMPLETED" else "⏳" if profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"] else "⚠️"
+    
     summary_output.append("### 📊 Target Profiling Summary")
     summary_output.append("| Metric | Value |")
     summary_output.append("| :--- | :--- |")
@@ -81,33 +92,36 @@ def main():
     summary_output.append(f"| **Target Name** | `{TARGET_NAME}` |")
     summary_output.append("")
 
-    # --- 2. Detailed Breakdown ---
+    # --- 2. Detailed Attributes ---
     summary_output.append("### 🛠️ Detailed Profiling Attributes")
     
-    summary_output.append("#### ⚙️ System Capabilities")
-    if other_details:
-        summary_output.append("```json\n" + json.dumps(other_details, indent=2, ensure_ascii=False) + "\n```")
+    if profiling_status == "COMPLETED":
+        # System Capabilities
+        summary_output.append("#### ⚙️ System Capabilities")
+        if other_details:
+            summary_output.append("```json\n" + json.dumps(other_details, indent=2, ensure_ascii=False) + "\n```")
+        else:
+            summary_output.append("*No capabilities found.*")
+
+        # AI Generated Fields
+        if ai_fields:
+            summary_output.append("#### 🧠 AI Generated Fields")
+            summary_output.append("```json\n" + json.dumps(ai_fields, indent=2) + "\n```")
     else:
-        summary_output.append("*No capabilities found.*")
+        summary_output.append(f"> {status_emoji} Profiling is in status: **{profiling_status}**")
 
-    if ai_fields:
-        summary_output.append("#### 🧠 AI Generated Fields")
-        summary_output.append("```json\n" + json.dumps(ai_fields, indent=2) + "\n```")
-
-    # --- 3. THE RAW RESPONSE (Restored) ---
+    # --- 3. Full API Response (Restored) ---
     summary_output.append("---")
-    summary_output.append("### 📄 Raw API Response Output")
-    summary_output.append("Below is the full JSON response received from the Prisma AIRS API:")
-    # Using a collapsible section so the page stays clean but the data is always there
-    summary_output.append("<details>")
-    summary_output.append("<summary><b>Click to View Full Raw JSON</b></summary>")
+    summary_output.append("### 📄 Raw API Response")
+    summary_output.append("<details><summary>Click to expand full raw JSON</summary>")
     summary_output.append("\n```json\n" + json.dumps(prof_data, indent=2, ensure_ascii=False) + "\n```\n")
     summary_output.append("</details>")
 
-    # Also printing to console log as per your original code
-    print("--- RAW API RESPONSE ---")
+    # Print to console for Action Logs
+    print("\n--- FULL API RESPONSE ---")
     print(json.dumps(prof_data, indent=2))
 
+    # Write the compiled summary out to GitHub Actions
     write_to_summary("\n".join(summary_output))
 
 if __name__ == "__main__":
