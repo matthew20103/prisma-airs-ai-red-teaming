@@ -1,4 +1,4 @@
-name: 1. Prisma AIRS - Create Target
+name: 3. Prisma AIRS - Create Target
 
 on:
   workflow_dispatch:
