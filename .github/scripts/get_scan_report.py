@@ -156,7 +156,34 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
 
     # --- TABLES ---
 
-    # 1. Recommendation Table (Applies to BOTH Static and Dynamic)
+    # 1. Agent Scan Goals Table (Applies ONLY to Dynamic, placed FIRST)
+    if scan_type == "dynamic" and goals_data:
+        goals_list = goals_data.get("data", [])
+        if goals_list:
+            goals_table = [
+                "#### 📋 Agent Scan Goals",
+                "| Scan Goal | Status |",
+                "|-----------|--------|"
+            ]
+            
+            for goal in goals_list:
+                goal_name = goal.get("goal", goal.get("name", goal.get("goal_type", "Unknown Goal")))
+                
+                # Check the boolean 'threat' field
+                threat_status = goal.get("threat")
+                
+                if threat_status is True:
+                    goal_status = "✅ SUCCESS"
+                elif threat_status is False:
+                    goal_status = "❌ FAILED"
+                else:
+                    goal_status = "⏳ UNKNOWN"
+                    
+                goals_table.append(f"| {escape_md_table(goal_name)} | {goal_status} |")
+                
+            write_to_summary("\n".join(goals_table) + "\n\n")
+
+    # 2. Recommendation Table (Applies to BOTH Static and Dynamic, placed SECOND)
     if rem_data or policy_data:
         mitigation_table = [
             "#### 🛡️ Recommendation to Mitigate Risks",
@@ -184,33 +211,6 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
         mitigation_table.append(f"| **Other Remediation Guidelines** | {rem_str} |")
         
         write_to_summary("\n".join(mitigation_table) + "\n\n")
-
-    # 2. Agent Scan Goals Table (Applies ONLY to Dynamic)
-    if scan_type == "dynamic" and goals_data:
-        goals_list = goals_data.get("data", [])
-        if goals_list:
-            goals_table = [
-                "#### 📋 Agent Scan Goals",
-                "| Scan Goal | Status |",
-                "|-----------|--------|"
-            ]
-            
-            for goal in goals_list:
-                goal_name = goal.get("goal", goal.get("name", goal.get("goal_type", "Unknown Goal")))
-                
-                # Check the boolean 'threat' field
-                threat_status = goal.get("threat")
-                
-                if threat_status is True:
-                    goal_status = "✅ SUCCESS"
-                elif threat_status is False:
-                    goal_status = "❌ FAILED"
-                else:
-                    goal_status = "⏳ UNKNOWN"
-                    
-                goals_table.append(f"| {escape_md_table(goal_name)} | {goal_status} |")
-                
-            write_to_summary("\n".join(goals_table) + "\n\n")
 
     # --- COLLAPSIBLE RAW JSON SECTIONS ---
 
