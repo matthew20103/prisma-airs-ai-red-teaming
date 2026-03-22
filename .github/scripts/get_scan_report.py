@@ -72,7 +72,7 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
                 mermaid_chart.append("```\n")
                 write_to_summary("\n".join(mermaid_chart))
 
-        # --- NEW FEATURE: Extract Top 3 Sub-Categories ---
+        # --- UPDATED FEATURE: Extract All Sub-Categories for Distribution Table ---
         all_sub_categories = []
         # Check across all possible report types
         for report_key in ["security_report", "safety_report", "brand_report", "compliance_report"]:
@@ -83,19 +83,19 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
                     for sc in sub_cats:
                         name = sc.get("display_name", "Unknown")
                         successful = sc.get("successful", 0)
-                        if successful > 0:
-                            all_sub_categories.append({"name": name, "successful": successful})
+                        # Append all sub-categories to get a full distribution
+                        all_sub_categories.append({"name": name, "successful": successful})
         
-        # Sort descending by successful count and take top 3
-        top_3 = sorted(all_sub_categories, key=lambda x: x["successful"], reverse=True)[:3]
+        # Sort descending by successful count
+        sorted_sub_categories = sorted(all_sub_categories, key=lambda x: x["successful"], reverse=True)
         
-        if top_3:
+        if sorted_sub_categories:
             table_md = [
-                "#### 🏆 Most Common Successful Attacks",
+                "#### 📊 Successful Attacks Distribution",
                 "| Attack Category | Total Successful |",
                 "|-----------------|------------------|"
             ]
-            for item in top_3:
+            for item in sorted_sub_categories:
                 table_md.append(f"| {item['name']} | {item['successful']} |")
             
             table_md.append("\n")
