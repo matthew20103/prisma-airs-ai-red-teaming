@@ -45,7 +45,34 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
     
     if report_resp.ok:
         print(f"✅ Successfully fetched {title} Report.")
-        write_to_summary("#### 📊 Scan Report\n```json\n" + json.dumps(report_resp.json(), indent=2) + "\n```")
+        report_data = report_resp.json()
+        
+        # --- NEW FEATURE: Extract severity stats and build Mermaid Pie Chart ---
+        severity_stats = report_data.get("severity_report", {}).get("stats", [])
+        if severity_stats:
+            mermaid_chart = [
+                "#### 🎯 Successful Attacks by Severity",
+                "```mermaid",
+                "pie title Severity of Successful Attacks"
+            ]
+            
+            # Loop through the stats and add only severities with > 0 successful attacks
+            for stat in severity_stats:
+                severity = stat.get("severity", "UNKNOWN")
+                successful_count = stat.get("successful", 0)
+                if successful_count > 0:
+                    mermaid_chart.append(f'    "{severity}" : {successful_count}')
+            
+            mermaid_chart.append("```\n")
+            write_to_summary("\n".join(mermaid_chart))
+
+        # --- NEW FEATURE: Collapse Raw Scan Report JSON ---
+        write_to_summary(
+            "<details>\n"
+            "<summary>📊 View Raw Scan Report</summary>\n\n"
+            "```json\n" + json.dumps(report_data, indent=2) + "\n```\n\n"
+            "</details>\n"
+        )
     else:
         print(f"❌ Failed to fetch {title} Report: {report_resp.status_code}")
         write_to_summary(f"#### ❌ Scan Report Failed\n**Status Code:** {report_resp.status_code}\n```json\n{report_resp.text}\n```")
@@ -56,7 +83,13 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
     
     if rem_resp.ok:
         print(f"✅ Successfully fetched {title} Remediation.")
-        write_to_summary("#### 🛠️ Remediation Guidelines\n```json\n" + json.dumps(rem_resp.json(), indent=2) + "\n```")
+        # --- NEW FEATURE: Collapse Raw Remediation JSON ---
+        write_to_summary(
+            "<details>\n"
+            "<summary>🛠️ View Remediation Guidelines</summary>\n\n"
+            "```json\n" + json.dumps(rem_resp.json(), indent=2) + "\n```\n\n"
+            "</details>\n"
+        )
     else:
         print(f"❌ Failed to fetch {title} Remediation: {rem_resp.status_code}")
         write_to_summary(f"#### ❌ Remediation Failed\n**Status Code:** {rem_resp.status_code}\n```json\n{rem_resp.text}\n```")
@@ -67,7 +100,13 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
     
     if policy_resp.ok:
         print(f"✅ Successfully fetched {title} Runtime Policy.")
-        write_to_summary("#### 🛡️ Runtime Security Profile\n```json\n" + json.dumps(policy_resp.json(), indent=2) + "\n```")
+        # --- NEW FEATURE: Collapse Raw Runtime Policy JSON ---
+        write_to_summary(
+            "<details>\n"
+            "<summary>🛡️ View Runtime Security Profile</summary>\n\n"
+            "```json\n" + json.dumps(policy_resp.json(), indent=2) + "\n```\n\n"
+            "</details>\n"
+        )
     else:
         print(f"❌ Failed to fetch {title} Runtime Policy: {policy_resp.status_code}")
         write_to_summary(f"#### ❌ Runtime Policy Failed\n**Status Code:** {policy_resp.status_code}\n```json\n{policy_resp.text}\n```")
