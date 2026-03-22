@@ -78,6 +78,7 @@ def main():
         sys.exit(1)
 
     write_to_summary("## 📥 Prisma AIRS Report Downloads")
+    write_to_summary("> **💡 NOTE:** Your files have been successfully generated! **Scroll down to the very bottom of this page to the 'Artifacts' section** to download them.\n")
 
     download_report(ATTACK_JOB_ID, "Attack Library")
     download_report(AGENT_JOB_ID, "Agent Scan")
