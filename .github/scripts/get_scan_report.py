@@ -26,6 +26,27 @@ def get_access_token():
     resp.raise_for_status()
     return resp.json().get("access_token")
 
+def find_keys(obj, target_key, results=None):
+    """Recursively search for all values associated with a specific key in a JSON object."""
+    if results is None:
+        results = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == target_key:
+                results.append(v)
+            else:
+                find_keys(v, target_key, results)
+    elif isinstance(obj, list):
+        for item in obj:
+            find_keys(item, target_key, results)
+    return results
+
+def escape_md_table(text):
+    """Escapes characters that would break a Markdown table cell."""
+    if isinstance(text, (dict, list)):
+        text = json.dumps(text)
+    return str(text).replace('\n', '<br>').replace('\r', '').replace('|', '&#124;')
+
 def fetch_full_report_suite(job_id, base_endpoint, title):
     """Helper to fetch the report, remediation, and runtime policy data."""
     if not job_id:
@@ -39,15 +60,42 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
     
     write_to_summary(f"### {title}\n**Job ID:** `{job_id}`\n")
 
+    report_data, rem_data, policy_data = None, None, None
+
     # 1. Fetch the Scan Report
     print(f"\nFetching {title} (Report) using Job ID: {job_id}...")
     report_resp = requests.get(f"{base_url}/report", headers=headers)
-    
     if report_resp.ok:
         print(f"✅ Successfully fetched {title} Report.")
         report_data = report_resp.json()
-        
-        # --- FEATURE: Extract severity stats and build Mermaid Pie Chart ---
+    else:
+        print(f"❌ Failed to fetch {title} Report: {report_resp.status_code}")
+        write_to_summary(f"#### ❌ Scan Report Failed\n**Status Code:** {report_resp.status_code}\n```json\n{report_resp.text}\n```")
+
+    # 2. Fetch the Remediation Data
+    print(f"Fetching {title} (Remediation) using Job ID: {job_id}...")
+    rem_resp = requests.get(f"{base_url}/remediation", headers=headers)
+    if rem_resp.ok:
+        print(f"✅ Successfully fetched {title} Remediation.")
+        rem_data = rem_resp.json()
+    else:
+        print(f"❌ Failed to fetch {title} Remediation: {rem_resp.status_code}")
+        write_to_summary(f"#### ❌ Remediation Failed\n**Status Code:** {rem_resp.status_code}\n```json\n{rem_resp.text}\n```")
+
+    # 3. Fetch the Runtime Policy Config
+    print(f"Fetching {title} (Runtime Policy) using Job ID: {job_id}...")
+    policy_resp = requests.get(f"{base_url}/runtime-policy-config", headers=headers)
+    if policy_resp.ok:
+        print(f"✅ Successfully fetched {title} Runtime Policy.")
+        policy_data = policy_resp.json()
+    else:
+        print(f"❌ Failed to fetch {title} Runtime Policy: {policy_resp.status_code}")
+        write_to_summary(f"#### ❌ Runtime Policy Failed\n**Status Code:** {policy_resp.status_code}\n```json\n{policy_resp.text}\n```")
+
+    # --- RENDER VISUALIZATIONS ---
+
+    if report_data:
+        # Pie Chart Generation
         severity_report = report_data.get("severity_report", {})
         if severity_report:
             severity_stats = severity_report.get("stats", [])
@@ -61,20 +109,17 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
                     "pie title Severity of Successful Attacks"
                 ]
                 
-                # Loop through the stats and add only severities with > 0 successful attacks
                 for stat in severity_stats:
                     severity = stat.get("severity", "UNKNOWN")
                     successful_count = stat.get("successful", 0)
                     if successful_count > 0:
-                        # Append the count to the label so it shows in the Mermaid legend
                         mermaid_chart.append(f'    "{severity} ({successful_count})" : {successful_count}')
                 
                 mermaid_chart.append("```\n")
                 write_to_summary("\n".join(mermaid_chart))
 
-        # --- UPDATED FEATURE: Extract All Sub-Categories for Distribution Table ---
+        # Successful Attacks Distribution Table
         all_sub_categories = []
-        # Check across all possible report types
         for report_key in ["security_report", "safety_report", "brand_report", "compliance_report"]:
             rep = report_data.get(report_key)
             if rep and isinstance(rep, dict):
@@ -83,12 +128,9 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
                     for sc in sub_cats:
                         name = sc.get("display_name", "Unknown")
                         successful = sc.get("successful", 0)
-                        # Append all sub-categories to get a full distribution
                         all_sub_categories.append({"name": name, "successful": successful})
         
-        # Sort descending by successful count
         sorted_sub_categories = sorted(all_sub_categories, key=lambda x: x["successful"], reverse=True)
-        
         if sorted_sub_categories:
             table_md = [
                 "#### 📊 Successful Attacks Distribution",
@@ -101,51 +143,60 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
             table_md.append("\n")
             write_to_summary("\n".join(table_md))
 
-        # --- FEATURE: Collapse Raw Scan Report JSON ---
+    # --- NEW FEATURE: Recommendation to Mitigate Risks Table ---
+    
+    mitigation_table = [
+        "#### 🛡️ Recommendation to Mitigate Risks",
+        "| Mitigation Type | Details |",
+        "|-----------------|---------|"
+    ]
+
+    # Extract unique policy IDs
+    policy_ids = []
+    if policy_data:
+        for p in find_keys(policy_data, "policy_id"):
+            if str(p) not in policy_ids:
+                policy_ids.append(str(p))
+    
+    policy_str = "<br>".join([f"<code>{escape_md_table(p)}</code>" for p in policy_ids]) if policy_ids else "None found"
+    mitigation_table.append(f"| **Prisma AIRS AI Runtime Security** | {policy_str} |")
+
+    # Extract unique remediations
+    remediations = []
+    if rem_data:
+        for r in find_keys(rem_data, "remediation"):
+            safe_r = escape_md_table(r)
+            if safe_r not in remediations:
+                remediations.append(safe_r)
+    
+    rem_str = "<br><br>".join([f"• {r}" for r in remediations]) if remediations else "None found"
+    mitigation_table.append(f"| **Other Remediation Guidelines** | {rem_str} |")
+    
+    write_to_summary("\n".join(mitigation_table) + "\n\n")
+
+    # --- COLLAPSIBLE RAW JSON SECTIONS ---
+
+    if report_data:
         write_to_summary(
             "<details>\n"
             "<summary>📊 View Raw Scan Report</summary>\n\n"
             "```json\n" + json.dumps(report_data, indent=2) + "\n```\n\n"
             "</details>\n"
         )
-    else:
-        print(f"❌ Failed to fetch {title} Report: {report_resp.status_code}")
-        write_to_summary(f"#### ❌ Scan Report Failed\n**Status Code:** {report_resp.status_code}\n```json\n{report_resp.text}\n```")
-
-    # 2. Fetch the Remediation Data
-    print(f"Fetching {title} (Remediation) using Job ID: {job_id}...")
-    rem_resp = requests.get(f"{base_url}/remediation", headers=headers)
-    
-    if rem_resp.ok:
-        print(f"✅ Successfully fetched {title} Remediation.")
-        # --- FEATURE: Collapse Raw Remediation JSON ---
+    if rem_data:
         write_to_summary(
             "<details>\n"
             "<summary>🛠️ View Remediation Guidelines</summary>\n\n"
-            "```json\n" + json.dumps(rem_resp.json(), indent=2) + "\n```\n\n"
+            "```json\n" + json.dumps(rem_data, indent=2) + "\n```\n\n"
             "</details>\n"
         )
-    else:
-        print(f"❌ Failed to fetch {title} Remediation: {rem_resp.status_code}")
-        write_to_summary(f"#### ❌ Remediation Failed\n**Status Code:** {rem_resp.status_code}\n```json\n{rem_resp.text}\n```")
-
-    # 3. Fetch the Runtime Policy Config
-    print(f"Fetching {title} (Runtime Policy) using Job ID: {job_id}...")
-    policy_resp = requests.get(f"{base_url}/runtime-policy-config", headers=headers)
-    
-    if policy_resp.ok:
-        print(f"✅ Successfully fetched {title} Runtime Policy.")
-        # --- FEATURE: Collapse Raw Runtime Policy JSON ---
+    if policy_data:
         write_to_summary(
             "<details>\n"
             "<summary>🛡️ View Runtime Security Profile</summary>\n\n"
-            "```json\n" + json.dumps(policy_resp.json(), indent=2) + "\n```\n\n"
+            "```json\n" + json.dumps(policy_data, indent=2) + "\n```\n\n"
             "</details>\n"
         )
-    else:
-        print(f"❌ Failed to fetch {title} Runtime Policy: {policy_resp.status_code}")
-        write_to_summary(f"#### ❌ Runtime Policy Failed\n**Status Code:** {policy_resp.status_code}\n```json\n{policy_resp.text}\n```")
-
 
 def main():
     print("Generating OAuth 2.0 Access Token...")
