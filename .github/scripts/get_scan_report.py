@@ -48,10 +48,14 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
         report_data = report_resp.json()
         
         # --- NEW FEATURE: Extract severity stats and build Mermaid Pie Chart ---
-        severity_stats = report_data.get("severity_report", {}).get("stats", [])
+        severity_report = report_data.get("severity_report", {})
+        severity_stats = severity_report.get("stats", [])
+        total_successful = severity_report.get("successful", 0)
+        
         if severity_stats:
             mermaid_chart = [
                 "#### 🎯 Successful Attacks by Severity",
+                f"**Total Successful Attacks:** {total_successful}\n",
                 "```mermaid",
                 "pie title Severity of Successful Attacks"
             ]
@@ -61,7 +65,8 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
                 severity = stat.get("severity", "UNKNOWN")
                 successful_count = stat.get("successful", 0)
                 if successful_count > 0:
-                    mermaid_chart.append(f'    "{severity}" : {successful_count}')
+                    # Append the count to the label so it shows in the Mermaid legend
+                    mermaid_chart.append(f'    "{severity} ({successful_count})" : {successful_count}')
             
             mermaid_chart.append("```\n")
             write_to_summary("\n".join(mermaid_chart))
