@@ -49,12 +49,10 @@ jobs:
           FILE_FORMAT: ${{ github.event.inputs.file_format }}
         run: python .github/scripts/download_scan_report.py
 
-      # This step attaches the downloaded files to the workflow run
+      # --- UPDATED UPLOAD STEP ---
       - name: Upload Report Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Prisma-AIRS-Downloaded-Reports
-          path: |
-            *.*
-          # Only uploads files if they were successfully created
-          if-no-files-found: ignore
+          path: reports/
+          if-no-files-found: error # This will force the action to fail/warn if the upload misses!
