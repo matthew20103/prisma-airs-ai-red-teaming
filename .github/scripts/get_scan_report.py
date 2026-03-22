@@ -169,7 +169,8 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
             if safe_r not in remediations:
                 remediations.append(safe_r)
     
-    rem_str = "<br><br>".join([f"• {r}" for r in remediations]) if remediations else "None found"
+    # UPDATED: Changed from bullet points to code blocks
+    rem_str = "<br>".join([f"<code>{r}</code>" for r in remediations]) if remediations else "None found"
     mitigation_table.append(f"| **Other Remediation Guidelines** | {rem_str} |")
     
     write_to_summary("\n".join(mitigation_table) + "\n\n")
