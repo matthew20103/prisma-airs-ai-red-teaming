@@ -47,8 +47,8 @@ def escape_md_table(text):
         text = json.dumps(text)
     return str(text).replace('\n', '<br>').replace('\r', '').replace('|', '&#124;')
 
-def fetch_full_report_suite(job_id, base_endpoint, title):
-    """Helper to fetch the report, remediation, and runtime policy data."""
+def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
+    """Helper to fetch the report, remediation, runtime policy, or goals data."""
     if not job_id:
         msg = f"⚠️ Skipped {title}: No Job ID provided."
         print(msg)
@@ -60,9 +60,9 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
     
     write_to_summary(f"### {title}\n**Job ID:** `{job_id}`\n")
 
-    report_data, rem_data, policy_data = None, None, None
+    report_data, rem_data, policy_data, goals_data = None, None, None, None
 
-    # 1. Fetch the Scan Report
+    # 1. Fetch the Scan Report (Done for both scan types)
     print(f"\nFetching {title} (Report) using Job ID: {job_id}...")
     report_resp = requests.get(f"{base_url}/report", headers=headers)
     if report_resp.ok:
@@ -72,25 +72,33 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
         print(f"❌ Failed to fetch {title} Report: {report_resp.status_code}")
         write_to_summary(f"#### ❌ Scan Report Failed\n**Status Code:** {report_resp.status_code}\n```json\n{report_resp.text}\n```")
 
-    # 2. Fetch the Remediation Data
-    print(f"Fetching {title} (Remediation) using Job ID: {job_id}...")
-    rem_resp = requests.get(f"{base_url}/remediation", headers=headers)
-    if rem_resp.ok:
-        print(f"✅ Successfully fetched {title} Remediation.")
-        rem_data = rem_resp.json()
-    else:
-        print(f"❌ Failed to fetch {title} Remediation: {rem_resp.status_code}")
-        write_to_summary(f"#### ❌ Remediation Failed\n**Status Code:** {rem_resp.status_code}\n```json\n{rem_resp.text}\n```")
+    # Fetch supplementary data based on scan type
+    if scan_type == "static":
+        # 2a. Fetch the Remediation Data
+        print(f"Fetching {title} (Remediation) using Job ID: {job_id}...")
+        rem_resp = requests.get(f"{base_url}/remediation", headers=headers)
+        if rem_resp.ok:
+            print(f"✅ Successfully fetched {title} Remediation.")
+            rem_data = rem_resp.json()
+        
+        # 3a. Fetch the Runtime Policy Config
+        print(f"Fetching {title} (Runtime Policy) using Job ID: {job_id}...")
+        policy_resp = requests.get(f"{base_url}/runtime-policy-config", headers=headers)
+        if policy_resp.ok:
+            print(f"✅ Successfully fetched {title} Runtime Policy.")
+            policy_data = policy_resp.json()
+            
+    elif scan_type == "dynamic":
+        # 2b. Fetch Agent Scan Goals List
+        print(f"Fetching {title} (Goals List) using Job ID: {job_id}...")
+        list_resp = requests.get(f"{base_url}/list", headers=headers)
+        if list_resp.ok:
+            print(f"✅ Successfully fetched {title} Goals List.")
+            goals_data = list_resp.json()
+        else:
+            print(f"❌ Failed to fetch {title} Goals: {list_resp.status_code}")
+            write_to_summary(f"#### ❌ Goals List Failed\n**Status Code:** {list_resp.status_code}\n```json\n{list_resp.text}\n```")
 
-    # 3. Fetch the Runtime Policy Config
-    print(f"Fetching {title} (Runtime Policy) using Job ID: {job_id}...")
-    policy_resp = requests.get(f"{base_url}/runtime-policy-config", headers=headers)
-    if policy_resp.ok:
-        print(f"✅ Successfully fetched {title} Runtime Policy.")
-        policy_data = policy_resp.json()
-    else:
-        print(f"❌ Failed to fetch {title} Runtime Policy: {policy_resp.status_code}")
-        write_to_summary(f"#### ❌ Runtime Policy Failed\n**Status Code:** {policy_resp.status_code}\n```json\n{policy_resp.text}\n```")
 
     # --- RENDER VISUALIZATIONS ---
 
@@ -143,37 +151,62 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
             table_md.append("\n")
             write_to_summary("\n".join(table_md))
 
-    # --- NEW FEATURE: Recommendation to Mitigate Risks Table ---
-    
-    mitigation_table = [
-        "#### 🛡️ Recommendation to Mitigate Risks",
-        "| Mitigation Type | Details |",
-        "|-----------------|---------|"
-    ]
+    # --- DYNAMIC TABLES BASED ON SCAN TYPE ---
 
-    # Extract unique policy IDs
-    policy_ids = []
-    if policy_data:
-        for p in find_keys(policy_data, "policy_id"):
-            if str(p) not in policy_ids:
-                policy_ids.append(str(p))
-    
-    policy_str = "<br>".join([f"<code>{escape_md_table(p)}</code>" for p in policy_ids]) if policy_ids else "None found"
-    mitigation_table.append(f"| **Prisma AIRS AI Runtime Security** | {policy_str} |")
+    if scan_type == "static" and (rem_data or policy_data):
+        mitigation_table = [
+            "#### 🛡️ Recommendation to Mitigate Risks",
+            "| Mitigation Type | Details |",
+            "|-----------------|---------|"
+        ]
 
-    # Extract unique remediations
-    remediations = []
-    if rem_data:
-        for r in find_keys(rem_data, "remediation"):
-            safe_r = escape_md_table(r)
-            if safe_r not in remediations:
-                remediations.append(safe_r)
-    
-    # UPDATED: Changed from bullet points to code blocks
-    rem_str = "<br>".join([f"<code>{r}</code>" for r in remediations]) if remediations else "None found"
-    mitigation_table.append(f"| **Other Remediation Guidelines** | {rem_str} |")
-    
-    write_to_summary("\n".join(mitigation_table) + "\n\n")
+        policy_ids = []
+        if policy_data:
+            for p in find_keys(policy_data, "policy_id"):
+                if str(p) not in policy_ids:
+                    policy_ids.append(str(p))
+        
+        policy_str = "<br>".join([f"<code>{escape_md_table(p)}</code>" for p in policy_ids]) if policy_ids else "None found"
+        mitigation_table.append(f"| **Prisma AIRS AI Runtime Security** | {policy_str} |")
+
+        remediations = []
+        if rem_data:
+            for r in find_keys(rem_data, "remediation"):
+                safe_r = escape_md_table(r)
+                if safe_r not in remediations:
+                    remediations.append(safe_r)
+        
+        rem_str = "<br>".join([f"<code>{r}</code>" for r in remediations]) if remediations else "None found"
+        mitigation_table.append(f"| **Other Remediation Guidelines** | {rem_str} |")
+        
+        write_to_summary("\n".join(mitigation_table) + "\n\n")
+
+    elif scan_type == "dynamic" and goals_data:
+        goals_list = goals_data.get("data", [])
+        if goals_list:
+            goals_table = [
+                "#### 📋 Agent Scan Goals",
+                "| Scan Goal | Status |",
+                "|-----------|--------|"
+            ]
+            
+            for goal in goals_list:
+                # Extracts the goal name and status, defaulting safely if keys differ slightly
+                goal_name = goal.get("goal", goal.get("name", goal.get("goal_type", "Unknown Goal")))
+                goal_status = str(goal.get("status", goal.get("successful", "Unknown"))).upper()
+                
+                # Add emojis for visual clarity
+                if goal_status in ["SUCCESS", "PASSED", "TRUE", "COMPLETED"]:
+                    goal_status = f"✅ {goal_status}"
+                elif goal_status in ["FAILED", "FALSE", "ERROR"]:
+                    goal_status = f"❌ {goal_status}"
+                elif goal_status in ["PENDING", "IN_PROGRESS"]:
+                    goal_status = f"⏳ {goal_status}"
+                    
+                goals_table.append(f"| {escape_md_table(goal_name)} | {goal_status} |")
+                
+            write_to_summary("\n".join(goals_table) + "\n\n")
+
 
     # --- COLLAPSIBLE RAW JSON SECTIONS ---
 
@@ -184,18 +217,26 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
             "```json\n" + json.dumps(report_data, indent=2) + "\n```\n\n"
             "</details>\n"
         )
-    if rem_data:
+    if scan_type == "static":
+        if rem_data:
+            write_to_summary(
+                "<details>\n"
+                "<summary>🛠️ View Remediation Guidelines</summary>\n\n"
+                "```json\n" + json.dumps(rem_data, indent=2) + "\n```\n\n"
+                "</details>\n"
+            )
+        if policy_data:
+            write_to_summary(
+                "<details>\n"
+                "<summary>🛡️ View Runtime Security Profile</summary>\n\n"
+                "```json\n" + json.dumps(policy_data, indent=2) + "\n```\n\n"
+                "</details>\n"
+            )
+    elif scan_type == "dynamic" and goals_data:
         write_to_summary(
             "<details>\n"
-            "<summary>🛠️ View Remediation Guidelines</summary>\n\n"
-            "```json\n" + json.dumps(rem_data, indent=2) + "\n```\n\n"
-            "</details>\n"
-        )
-    if policy_data:
-        write_to_summary(
-            "<details>\n"
-            "<summary>🛡️ View Runtime Security Profile</summary>\n\n"
-            "```json\n" + json.dumps(policy_data, indent=2) + "\n```\n\n"
+            "<summary>📋 View Raw Scan Goals</summary>\n\n"
+            "```json\n" + json.dumps(goals_data, indent=2) + "\n```\n\n"
             "</details>\n"
         )
 
@@ -213,10 +254,10 @@ def main():
     write_to_summary("## 🛡️ Prisma AIRS Security Reports Suite")
 
     # Fetch Attack Library Suite (Static)
-    fetch_full_report_suite(ATTACK_JOB_ID, "/report/static/:job_id", "📚 Attack Library")
+    fetch_full_report_suite(ATTACK_JOB_ID, "/report/static/:job_id", "📚 Attack Library", "static")
 
     # Fetch Agent Scan Suite (Dynamic)
-    fetch_full_report_suite(AGENT_JOB_ID, "/report/dynamic/:job_id", "🔬 Agent Scan")
+    fetch_full_report_suite(AGENT_JOB_ID, "/report/dynamic/:job_id", "🔬 Agent Scan", "dynamic")
 
     print("\n✅ Script execution complete.")
 
