@@ -62,7 +62,7 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
 
     report_data, rem_data, policy_data, goals_data = None, None, None, None
 
-    # 1. Fetch the Scan Report (Done for both)
+    # 1. Fetch the Scan Report
     print(f"\nFetching {title} (Report) using Job ID: {job_id}...")
     report_resp = requests.get(f"{base_url}/report", headers=headers)
     if report_resp.ok:
@@ -72,7 +72,7 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
         print(f"❌ Failed to fetch {title} Report: {report_resp.status_code}")
         write_to_summary(f"#### ❌ Scan Report Failed\n**Status Code:** {report_resp.status_code}\n```json\n{report_resp.text}\n```")
 
-    # 2. Fetch the Remediation Data (Done for both so raw JSON is available)
+    # 2. Fetch the Remediation Data
     print(f"Fetching {title} (Remediation) using Job ID: {job_id}...")
     rem_resp = requests.get(f"{base_url}/remediation", headers=headers)
     if rem_resp.ok:
@@ -80,10 +80,9 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
         rem_data = rem_resp.json()
     else:
         print(f"❌ Failed to fetch {title} Remediation: {rem_resp.status_code}")
-        # Only log error to console to keep summary clean if endpoint isn't supported for dynamic
         print(f"Response: {rem_resp.text}")
 
-    # 3. Fetch the Runtime Policy Config (Done for both so raw JSON is available)
+    # 3. Fetch the Runtime Policy Config
     print(f"Fetching {title} (Runtime Policy) using Job ID: {job_id}...")
     policy_resp = requests.get(f"{base_url}/runtime-policy-config", headers=headers)
     if policy_resp.ok:
@@ -96,7 +95,6 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
     # 4. Fetch Agent Scan Goals List (Only for dynamic)
     if scan_type == "dynamic":
         print(f"Fetching {title} (Goals List) using Job ID: {job_id}...")
-        # FIXED: Updated endpoint to /list-goals
         list_resp = requests.get(f"{base_url}/list-goals", headers=headers)
         if list_resp.ok:
             print(f"✅ Successfully fetched {title} Goals List.")
@@ -104,7 +102,6 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
         else:
             print(f"❌ Failed to fetch {title} Goals: {list_resp.status_code}")
             write_to_summary(f"#### ❌ Goals List Failed\n**Status Code:** {list_resp.status_code}\n```json\n{list_resp.text}\n```")
-
 
     # --- RENDER VISUALIZATIONS ---
 
@@ -157,9 +154,10 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
             table_md.append("\n")
             write_to_summary("\n".join(table_md))
 
-    # --- DYNAMIC TABLES BASED ON SCAN TYPE ---
+    # --- TABLES ---
 
-    if scan_type == "static" and (rem_data or policy_data):
+    # 1. Recommendation Table (Applies to BOTH Static and Dynamic)
+    if rem_data or policy_data:
         mitigation_table = [
             "#### 🛡️ Recommendation to Mitigate Risks",
             "| Mitigation Type | Details |",
@@ -187,7 +185,8 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
         
         write_to_summary("\n".join(mitigation_table) + "\n\n")
 
-    elif scan_type == "dynamic" and goals_data:
+    # 2. Agent Scan Goals Table (Applies ONLY to Dynamic)
+    if scan_type == "dynamic" and goals_data:
         goals_list = goals_data.get("data", [])
         if goals_list:
             goals_table = [
@@ -198,22 +197,22 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
             
             for goal in goals_list:
                 goal_name = goal.get("goal", goal.get("name", goal.get("goal_type", "Unknown Goal")))
-                goal_status = str(goal.get("status", goal.get("successful", "Unknown"))).upper()
                 
-                if goal_status in ["SUCCESS", "PASSED", "TRUE", "COMPLETED"]:
-                    goal_status = f"✅ {goal_status}"
-                elif goal_status in ["FAILED", "FALSE", "ERROR"]:
-                    goal_status = f"❌ {goal_status}"
-                elif goal_status in ["PENDING", "IN_PROGRESS"]:
-                    goal_status = f"⏳ {goal_status}"
+                # Check the boolean 'threat' field
+                threat_status = goal.get("threat")
+                
+                if threat_status is True:
+                    goal_status = "✅ SUCCESS"
+                elif threat_status is False:
+                    goal_status = "❌ FAILED"
+                else:
+                    goal_status = "⏳ UNKNOWN"
                     
                 goals_table.append(f"| {escape_md_table(goal_name)} | {goal_status} |")
                 
             write_to_summary("\n".join(goals_table) + "\n\n")
 
-
     # --- COLLAPSIBLE RAW JSON SECTIONS ---
-    # FIXED: Re-enabled raw outputs for both static and dynamic scans
 
     if report_data:
         write_to_summary(
