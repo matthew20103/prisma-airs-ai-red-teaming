@@ -40,22 +40,21 @@ def download_report(job_id, label):
     params = {"file_format": FILE_FORMAT}
     url = f"{DATA_BASE_URL}/report/{job_id}/download"
     
-    # Use stream=True to handle file downloading efficiently
     response = requests.get(url, headers=headers, params=params, stream=True)
     
     if response.ok:
-        # Try to extract the official filename from the headers
         content_disposition = response.headers.get("Content-Disposition", "")
         if "filename=" in content_disposition:
-            # Extracts filename="something.zip" -> something.zip
             filename = content_disposition.split("filename=")[-1].strip("\"'")
         else:
-            # Fallback naming convention if header is missing
             ext = ".zip" if FILE_FORMAT == "ALL" else f".{FILE_FORMAT.lower()}"
             filename = f"{label.replace(' ', '_').lower()}_{job_id}{ext}"
             
-        # Write chunks to disk
-        with open(filename, 'wb') as f:
+        # --- NEW: Create a directory and save the file inside it ---
+        os.makedirs("reports", exist_ok=True)
+        filepath = os.path.join("reports", filename)
+        
+        with open(filepath, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
                 
