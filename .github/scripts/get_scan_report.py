@@ -37,7 +37,7 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
     headers = {"Authorization": f"Bearer {get_access_token()}", "Accept": "application/json"}
     base_url = f"{DATA_BASE_URL}{base_endpoint.replace(':job_id', job_id)}"
     
-    write_to_summary(f"### {title}\n**Job ID:** `{job_id}`")
+    write_to_summary(f"### {title}\n**Job ID:** `{job_id}`\n")
 
     # 1. Fetch the Scan Report
     print(f"\nFetching {title} (Report) using Job ID: {job_id}...")
@@ -47,31 +47,61 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
         print(f"✅ Successfully fetched {title} Report.")
         report_data = report_resp.json()
         
-        # --- NEW FEATURE: Extract severity stats and build Mermaid Pie Chart ---
+        # --- FEATURE: Extract severity stats and build Mermaid Pie Chart ---
         severity_report = report_data.get("severity_report", {})
-        severity_stats = severity_report.get("stats", [])
-        total_successful = severity_report.get("successful", 0)
-        
-        if severity_stats:
-            mermaid_chart = [
-                "#### 🎯 Successful Attacks by Severity",
-                f"**Total Successful Attacks:** {total_successful}\n",
-                "```mermaid",
-                "pie title Severity of Successful Attacks"
-            ]
+        if severity_report:
+            severity_stats = severity_report.get("stats", [])
+            total_successful = severity_report.get("successful", 0)
             
-            # Loop through the stats and add only severities with > 0 successful attacks
-            for stat in severity_stats:
-                severity = stat.get("severity", "UNKNOWN")
-                successful_count = stat.get("successful", 0)
-                if successful_count > 0:
-                    # Append the count to the label so it shows in the Mermaid legend
-                    mermaid_chart.append(f'    "{severity} ({successful_count})" : {successful_count}')
-            
-            mermaid_chart.append("```\n")
-            write_to_summary("\n".join(mermaid_chart))
+            if severity_stats:
+                mermaid_chart = [
+                    "#### 🎯 Successful Attacks by Severity",
+                    f"**Total Successful Attacks:** {total_successful}\n",
+                    "```mermaid",
+                    "pie title Severity of Successful Attacks"
+                ]
+                
+                # Loop through the stats and add only severities with > 0 successful attacks
+                for stat in severity_stats:
+                    severity = stat.get("severity", "UNKNOWN")
+                    successful_count = stat.get("successful", 0)
+                    if successful_count > 0:
+                        # Append the count to the label so it shows in the Mermaid legend
+                        mermaid_chart.append(f'    "{severity} ({successful_count})" : {successful_count}')
+                
+                mermaid_chart.append("```\n")
+                write_to_summary("\n".join(mermaid_chart))
 
-        # --- NEW FEATURE: Collapse Raw Scan Report JSON ---
+        # --- NEW FEATURE: Extract Top 3 Sub-Categories ---
+        all_sub_categories = []
+        # Check across all possible report types
+        for report_key in ["security_report", "safety_report", "brand_report", "compliance_report"]:
+            rep = report_data.get(report_key)
+            if rep and isinstance(rep, dict):
+                sub_cats = rep.get("sub_categories", [])
+                if sub_cats:
+                    for sc in sub_cats:
+                        name = sc.get("display_name", "Unknown")
+                        successful = sc.get("successful", 0)
+                        if successful > 0:
+                            all_sub_categories.append({"name": name, "successful": successful})
+        
+        # Sort descending by successful count and take top 3
+        top_3 = sorted(all_sub_categories, key=lambda x: x["successful"], reverse=True)[:3]
+        
+        if top_3:
+            table_md = [
+                "#### 🏆 Most Common Successful Attacks",
+                "| Attack Category | Total Successful |",
+                "|-----------------|------------------|"
+            ]
+            for item in top_3:
+                table_md.append(f"| {item['name']} | {item['successful']} |")
+            
+            table_md.append("\n")
+            write_to_summary("\n".join(table_md))
+
+        # --- FEATURE: Collapse Raw Scan Report JSON ---
         write_to_summary(
             "<details>\n"
             "<summary>📊 View Raw Scan Report</summary>\n\n"
@@ -88,7 +118,7 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
     
     if rem_resp.ok:
         print(f"✅ Successfully fetched {title} Remediation.")
-        # --- NEW FEATURE: Collapse Raw Remediation JSON ---
+        # --- FEATURE: Collapse Raw Remediation JSON ---
         write_to_summary(
             "<details>\n"
             "<summary>🛠️ View Remediation Guidelines</summary>\n\n"
@@ -105,7 +135,7 @@ def fetch_full_report_suite(job_id, base_endpoint, title):
     
     if policy_resp.ok:
         print(f"✅ Successfully fetched {title} Runtime Policy.")
-        # --- NEW FEATURE: Collapse Raw Runtime Policy JSON ---
+        # --- FEATURE: Collapse Raw Runtime Policy JSON ---
         write_to_summary(
             "<details>\n"
             "<summary>🛡️ View Runtime Security Profile</summary>\n\n"
