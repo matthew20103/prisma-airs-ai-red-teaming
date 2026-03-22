@@ -1,0 +1,60 @@
+name: 8. Prisma AIRS - Download Scan Report
+
+on:
+  workflow_dispatch:
+    inputs:
+      attack_job_id:
+        description: 'Job ID for the Attack Library Scan (Static)'
+        required: false
+        type: string
+      agent_job_id:
+        description: 'Job ID for the Agent Scan (Dynamic)'
+        required: false
+        type: string
+      file_format:
+        description: 'Format of the downloaded report'
+        required: true
+        type: choice
+        options:
+          - ALL
+          - CSV
+          - JSON
+        default: ALL
+
+jobs:
+  download-reports:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Download Prisma AIRS Reports
+        env:
+          PRISMA_CLIENT_ID: ${{ secrets.PRISMA_CLIENT_ID }}
+          PRISMA_CLIENT_SECRET: ${{ secrets.PRISMA_CLIENT_SECRET }}
+          PRISMA_TSG_ID: ${{ secrets.PRISMA_TSG_ID }}
+          ATTACK_JOB_ID: ${{ github.event.inputs.attack_job_id }}
+          AGENT_JOB_ID: ${{ github.event.inputs.agent_job_id }}
+          FILE_FORMAT: ${{ github.event.inputs.file_format }}
+        run: python .github/scripts/download_scan_report.py
+
+      # This step attaches the downloaded files to the workflow run
+      - name: Upload Report Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prisma-AIRS-Downloaded-Reports
+          path: |
+            *.*
+          # Only uploads files if they were successfully created
+          if-no-files-found: ignore
