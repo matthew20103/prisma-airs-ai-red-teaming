@@ -27,10 +27,10 @@ def get_access_token():
     return resp.json().get("access_token")
 
 def escape_md(text):
-    """Escapes markdown tables effectively."""
+    """Escapes markdown for single-line usage."""
     if not text:
         return ""
-    return str(text).replace('\n', '<br>').replace('\r', '').replace('|', '&#124;')
+    return str(text).replace('\n', ' ').replace('\r', '').replace('|', '&#124;')
 
 def main():
     if not JOB_ID or not ATTACK_ID:
@@ -85,52 +85,54 @@ def main():
     write_to_summary(f"### Attack Category: {escape_md(attack_category)}")
     write_to_summary(f"**Goal:** {escape_md(goal)}  <br> **Final Result:** {status}\n")
 
-    # The API returns a list of lists for 'outputs'. We need to flatten it.
+    # Flatten the raw conversation data
     raw_conversation_data = attack.get("outputs", attack.get("turns", []))
     conversation_data = []
     
     for item in raw_conversation_data:
         if isinstance(item, list):
-            # If it's a list (like in your screenshot), extend our flat array
             conversation_data.extend(item)
         elif isinstance(item, dict):
-            # Fallback if it's already a dictionary
             conversation_data.append(item)
     
     if conversation_data:
-        table_md = [
-            "| Gen | Turn | Attack Prompt | Target AI Response | Status |",
-            "|-----|------|---------------|--------------------|--------|"
-        ]
-        
+        # Group by Attempt (generation)
+        attempts_map = {}
         for turn in conversation_data:
-            # Safety check to ensure it's a dictionary
             if not isinstance(turn, dict):
                 continue
+            gen_num = turn.get("generation", 1)  # Default to 1 if missing
+            if gen_num not in attempts_map:
+                attempts_map[gen_num] = []
+            attempts_map[gen_num].append(turn)
+            
+        # Render the grouped data
+        for gen_num in sorted(attempts_map.keys()):
+            write_to_summary(f"#### 🔄 Attempt {gen_num}")
+            
+            for turn in attempts_map[gen_num]:
+                turn_num = turn.get("turn", "N/A")
                 
-            gen_num = turn.get("generation", "N/A")
-            turn_num = turn.get("turn", "N/A")
-            
-            # Extract prompt and response using the keys from your screenshot
-            prompt = escape_md(turn.get("prompt", turn.get("input", "N/A")))
-            resp = escape_md(turn.get("output", turn.get("response", "N/A")))
-            
-            # Check turn-specific status (threat field)
-            is_threat = turn.get("threat")
-            if is_threat is True:
-                turn_status = "❌ Bypassed"
-            elif is_threat is False:
-                turn_status = "✅ Blocked"
-            else:
-                # Fallback just in case
-                if "successful" in turn:
-                    turn_status = "❌ Bypassed" if turn.get("successful") else "✅ Blocked"
+                # Extract prompt and response using keys
+                prompt = str(turn.get("prompt", turn.get("input", "N/A")))
+                resp = str(turn.get("output", turn.get("response", "N/A")))
+                
+                # Check turn-specific status (threat field)
+                is_threat = turn.get("threat")
+                if is_threat is True:
+                    turn_status = "❌ Bypassed"
+                elif is_threat is False:
+                    turn_status = "✅ Blocked"
                 else:
-                    turn_status = "N/A"
+                    if "successful" in turn:
+                        turn_status = "❌ Bypassed" if turn.get("successful") else "✅ Blocked"
+                    else:
+                        turn_status = "N/A"
 
-            table_md.append(f"| {gen_num} | {turn_num} | {prompt} | {resp} | {turn_status} |")
-            
-        write_to_summary("\n".join(table_md) + "\n")
+                # Clearly list out the Turn, Prompt, and Response using code blocks for safety
+                write_to_summary(f"**Turn {turn_num}** | **Status:** {turn_status}")
+                write_to_summary(f"**Attack Prompt:**\n```text\n{prompt}\n```")
+                write_to_summary(f"**Target AI Response:**\n```text\n{resp}\n```\n")
     else:
         write_to_summary("> *No turn-by-turn conversation data available in `outputs` or `turns` fields for this attack.*\n")
 
