@@ -77,13 +77,24 @@ def main():
         sys.exit(0)
 
     # Extract high-level details
-    attack_category = attack.get("category", attack.get("sub_category", "Unknown Category"))
-    goal = attack.get("goal", "Unknown Goal")
-    is_successful = attack.get("successful", False)
-    status = "❌ Bypassed" if is_successful else "✅ Blocked/Failed"
+    attack_category = attack.get("category_display_name", attack.get("category", "Unknown Category"))
+    goal = attack.get("goal", attack.get("prompt", "Unknown Goal"))
+    
+    # Overall Result based on 'threat' field
+    is_threat = attack.get("threat")
+    if is_threat is True:
+        overall_status = "❌ Bypassed (Threat Detected)"
+    elif is_threat is False:
+        overall_status = "✅ Blocked (Secured)"
+    else:
+        overall_status = "Unknown"
+
+    # Attack Success Rate (ASR)
+    asr = attack.get("asr", "N/A")
+    asr_text = f"{asr}%" if isinstance(asr, (int, float)) else str(asr)
     
     write_to_summary(f"### Attack Category: {escape_md(attack_category)}")
-    write_to_summary(f"**Goal:** {escape_md(goal)}  <br> **Final Result:** {status}\n")
+    write_to_summary(f"**Goal / Initial Prompt:** {escape_md(goal)} <br> **Overall Result:** {overall_status} <br> **Attack Success Rate (ASR):** {escape_md(asr_text)}\n")
 
     # Flatten the raw conversation data
     raw_conversation_data = attack.get("outputs", attack.get("turns", []))
@@ -118,10 +129,10 @@ def main():
                 resp = str(turn.get("output", turn.get("response", "N/A")))
                 
                 # Check turn-specific status (threat field)
-                is_threat = turn.get("threat")
-                if is_threat is True:
+                is_threat_turn = turn.get("threat")
+                if is_threat_turn is True:
                     turn_status = "❌ Bypassed"
-                elif is_threat is False:
+                elif is_threat_turn is False:
                     turn_status = "✅ Blocked"
                 else:
                     if "successful" in turn:
