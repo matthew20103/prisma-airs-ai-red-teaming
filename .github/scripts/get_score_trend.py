@@ -53,7 +53,6 @@ def main():
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
 
     # 2. Fetch Score Trend (Data Plane)
-    # Now we ALWAYS pass the date_range parameter
     params = {
         "target_id": target_id,
         "date_range": DATE_RANGE
@@ -85,27 +84,32 @@ def main():
         ""
     ]
 
+    # Generate the 3-column table
     if labels and series:
-        summary_output.append("### 📊 Trend Data")
+        table_lines = [
+            "### 📊 Trend Data",
+            "| Date | Type | Risk Score |",
+            "| :--- | :--- | :--- |"
+        ]
         
-        # Dynamically build table headers based on the job types returned
-        job_types = [s.get("label", "Unknown") for s in series]
-        headers = ["Date"] + job_types
-        
-        # Write Markdown Table Header
-        summary_output.append("| " + " | ".join(headers) + " |")
-        summary_output.append("|" + "|".join([" :--- "] * len(headers)) + "|")
-        
-        # Write rows
+        has_data = False
         for i, date_label in enumerate(labels):
-            row_data = [str(date_label)]
             for s in series:
+                job_type = s.get("label", "Unknown")
                 data_array = s.get("data", [])
-                # Handle potential nulls or out-of-bounds array indices safely
+                
+                # Retrieve the score for this specific date and job type
                 val = data_array[i] if i < len(data_array) else None
-                row_data.append("**" + str(val) + "**" if val is not None else "N/A")
-            
-            summary_output.append("| " + " | ".join(row_data) + " |")
+                
+                # Only add rows to the table if a score exists (ignores null days)
+                if val is not None:
+                    table_lines.append(f"| {date_label} | {job_type} | **{val}** |")
+                    has_data = True
+        
+        if has_data:
+            summary_output.extend(table_lines)
+        else:
+            summary_output.append("*No completed scans with risk scores found for this date range.*")
     else:
         summary_output.append("*No score trend data available for this target in the selected date range.*")
     
