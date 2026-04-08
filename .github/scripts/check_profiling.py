@@ -40,14 +40,18 @@ def format_val(v):
     return "N/A"
 
 def format_timestamp(ts):
-    """Converts unix timestamp to human-readable format."""
+    """Converts unix timestamp to human-readable format, handling seconds, ms, and μs."""
     if not ts or ts == "N/A":
         return "N/A"
     try:
         ts_float = float(ts)
-        # Handle milliseconds (common in APIs)
-        if ts_float > 1e11:
-            ts_float /= 1000
+        # Handle microseconds (16+ digits)
+        if ts_float > 1e14:
+            ts_float /= 1000000.0
+        # Handle milliseconds (13 digits)
+        elif ts_float > 1e11:
+            ts_float /= 1000.0
+            
         return datetime.utcfromtimestamp(ts_float).strftime('%Y-%m-%d %H:%M:%S UTC')
     except (ValueError, TypeError):
         # If it is already a string or format is unknown, return as-is
@@ -134,8 +138,8 @@ def main():
     summary_output.append(f"| **Known Competitors** | {format_val(competitors)} | {is_ai('competitors')} |")
     summary_output.append("")
 
-    # --- 2. System Capabilities Table ---
-    summary_output.append("### ⚙️ System Capabilities")
+    # --- 2. Additional Context Table ---
+    summary_output.append("### ⚙️ Additional Context")
     summary_output.append("| Metric | Value | AI Generated |")
     summary_output.append("| :--- | :--- | :--- |")
     summary_output.append(f"| **Base Model** | {format_val(base_model)} | {is_ai('base_model')} |")
