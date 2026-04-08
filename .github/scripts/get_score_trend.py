@@ -2,7 +2,6 @@ import os
 import requests
 import sys
 import json
-from datetime import datetime, timezone, timedelta
 
 # Environment Variables
 CLIENT_ID = os.environ.get("PRISMA_CLIENT_ID")
@@ -23,33 +22,19 @@ def write_to_summary(markdown_text):
             f.write(markdown_text + "\n")
 
 def get_access_token():
-    """Generates OAuth 2.0 Access Token."""
+    """Generates OAuth 2.0 Access Token (This must be a POST request)."""
     payload = {"grant_type": "client_credentials", "scope": f"tsg_id:{TSG_ID}"}
     resp = requests.post(AUTH_URL, data=payload, auth=(CLIENT_ID, CLIENT_SECRET))
     resp.raise_for_status()
     return resp.json().get("access_token")
 
-def format_timestamp(ts):
-    """Converts unix timestamp to human-readable format in HKT (UTC+8)."""
-    if not ts or ts == "N/A":
-        return "N/A"
-    try:
-        ts_float = float(ts)
-        # Handle microseconds
-        if ts_float > 1e14:
-            ts_float /= 1000000.0
-        # Handle milliseconds
-        elif ts_float > 1e11:
-            ts_float /= 1000.0
-            
-        hkt_tz = timezone(timedelta(hours=8))
-        return datetime.fromtimestamp(ts_float, tz=timezone.utc).astimezone(hkt_tz).strftime('%Y-%m-%d %H:%M:%S HKT')
-    except (ValueError, TypeError):
-        return str(ts)
-
 def main():
     try:
-        headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {get_access_token()}", 
+            "Content-Type": "application/json",
+            "prisma-tenant": TSG_ID
+        }
     except Exception as e:
         write_to_summary(f"### ❌ Prisma AIRS Score Trend Failed\n**Error:** Failed to authenticate: {e}")
         sys.exit(1)
@@ -61,24 +46,31 @@ def main():
 
     if not target_obj:
         write_to_summary(f"### ❌ Prisma AIRS Score Trend Failed\n**Error:** Target '{TARGET_NAME}' not found.")
+        print(f"Error: Target '{TARGET_NAME}' not found.")
         sys.exit(1)
 
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
 
-    # 2. Fetch Score Trend (Data Plane)
+    # 2. Fetch Score Trend (Data Plane) -> Note the hyphen in 'score-trend'
     params = {"target_id": target_id}
-    trend_resp = requests.get(f"{DATA_BASE_URL}/dashboard/score_trend", headers=headers, params=params)
+    trend_resp = requests.get(f"{DATA_BASE_URL}/dashboard/score-trend", headers=headers, params=params)
     
     if not trend_resp.ok:
-        write_to_summary(f"### ❌ Prisma AIRS Score Trend Failed\n**Error:** Failed to fetch score trend: {trend_resp.text}")
+        err_summary = (
+            f"### ❌ Prisma AIRS Score Trend Failed\n"
+            f"**HTTP {trend_resp.status_code}**\n\n"
+            f"**URL Attempted:** `{trend_resp.url}`\n"
+            f"**Raw Error Response:**\n```json\n{trend_resp.text}\n```"
+        )
+        write_to_summary(err_summary)
+        print(f"ERROR: HTTP {trend_resp.status_code}")
+        print(f"URL: {trend_resp.url}")
+        print(f"Response: {trend_resp.text}")
         sys.exit(1)
 
     trend_json = trend_resp.json()
-    
-    # Safely extract data depending on how the API wraps the list
-    data_points = trend_json.get("data", trend_json) if isinstance(trend_json, dict) else trend_json
-    if not isinstance(data_points, list):
-        data_points = []
+    labels = trend_json.get("labels", [])
+    series = trend_json.get("series", [])
 
     # --- Build Summary Output ---
     summary_output = [
@@ -87,18 +79,27 @@ def main():
         ""
     ]
 
-    if data_points:
+    if labels and series:
         summary_output.append("### 📊 Trend Data")
-        summary_output.append("| Date / Time (HKT) | Score |")
-        summary_output.append("| :--- | :--- |")
         
-        for point in data_points:
-            # Flexible key extraction to accommodate common API structures
-            raw_time = point.get("timestamp") or point.get("time") or point.get("date") or "N/A"
-            score = point.get("score") or point.get("risk_score") or point.get("value", "N/A")
+        # Dynamically build table headers based on the job types returned
+        job_types = [s.get("label", "Unknown") for s in series]
+        headers = ["Date"] + job_types
+        
+        # Write Markdown Table Header
+        summary_output.append("| " + " | ".join(headers) + " |")
+        summary_output.append("|" + "|".join([" :--- "] * len(headers)) + "|")
+        
+        # Write rows
+        for i, date_label in enumerate(labels):
+            row_data = [str(date_label)]
+            for s in series:
+                data_array = s.get("data", [])
+                # Handle potential nulls or out-of-bounds array indices safely
+                val = data_array[i] if i < len(data_array) else None
+                row_data.append("**" + str(val) + "**" if val is not None else "N/A")
             
-            human_time = format_timestamp(raw_time)
-            summary_output.append(f"| {human_time} | **{score}** |")
+            summary_output.append("| " + " | ".join(row_data) + " |")
     else:
         summary_output.append("*No score trend data available for this target yet.*")
     
