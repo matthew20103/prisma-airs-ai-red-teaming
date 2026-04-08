@@ -1,0 +1,32 @@
+name: 9. Prisma AIRS - Get Score Trend
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_name:
+        description: 'Name of the Target to retrieve score trend for'
+        type: string
+        required: true
+
+jobs:
+  get-score-trend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install Dependencies
+        run: pip install requests
+        
+      - name: Fetch Target Score Trend
+        env:
+          PRISMA_CLIENT_ID: "${{ secrets.PRISMA_CLIENT_ID }}"
+          PRISMA_CLIENT_SECRET: "${{ secrets.PRISMA_CLIENT_SECRET }}"
+          PRISMA_TSG_ID: "${{ secrets.PRISMA_TSG_ID }}"
+          TARGET_NAME: "${{ inputs.target_name }}"
+        run: python .github/scripts/get_score_trend.py
