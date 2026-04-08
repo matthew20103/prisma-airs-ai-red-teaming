@@ -154,6 +154,36 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
             table_md.append("\n")
             write_to_summary("\n".join(table_md))
 
+        # --- ADDED: OWASP Top 10 Compliance Table (Static Scan) ---
+        if scan_type == "static":
+            compliance_report = report_data.get("compliance_report", {})
+            compliance_sub_cats = compliance_report.get("sub_categories", [])
+            
+            if compliance_sub_cats:
+                # Attempt to filter for OWASP categories explicitly
+                owasp_categories = [c for c in compliance_sub_cats if "owasp" in c.get("display_name", "").lower()]
+                
+                # Fallback: If no explicit "OWASP" string is found in the display names, use all compliance categories
+                display_cats = owasp_categories if owasp_categories else compliance_sub_cats
+                
+                owasp_table = [
+                    "#### 📜 OWASP Top 10 for LLMs Compliance",
+                    "| Category | Total Attacks | Successful Attacks | Status |",
+                    "|----------|---------------|--------------------|--------|"
+                ]
+                
+                for cat in display_cats:
+                    name = cat.get("display_name", "Unknown")
+                    total = cat.get("total", 0)
+                    successful = cat.get("successful", 0)
+                    # Determine pass/fail based on whether any attacks bypassed defenses
+                    status = "✅ Pass" if successful == 0 else "❌ Fail"
+                    
+                    owasp_table.append(f"| {escape_md_table(name)} | {total} | {successful} | {status} |")
+                
+                owasp_table.append("\n")
+                write_to_summary("\n".join(owasp_table))
+
     # --- TABLES ---
 
     # 1. Agent Scan Goals Table (Applies ONLY to Dynamic, placed FIRST)
