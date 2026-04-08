@@ -29,6 +29,22 @@ def get_access_token():
     resp.raise_for_status()
     return resp.json().get("access_token")
 
+def fetch_data_plane_api(endpoint, headers, params):
+    """Helper to fetch Data Plane APIs and handle errors gracefully."""
+    resp = requests.get(endpoint, headers=headers, params=params)
+    if not resp.ok:
+        err_summary = (
+            f"### ❌ Prisma AIRS Data Fetch Failed\n"
+            f"**HTTP {resp.status_code}**\n\n"
+            f"**URL Attempted:** `{resp.url}`\n"
+            f"**Raw Error Response:**\n```json\n{resp.text}\n```"
+        )
+        write_to_summary(err_summary)
+        print(f"ERROR: HTTP {resp.status_code} for {resp.url}")
+        print(f"Response: {resp.text}")
+        sys.exit(1)
+    return resp.json()
+
 def main():
     try:
         headers = {
@@ -37,7 +53,7 @@ def main():
             "prisma-tenant": TSG_ID
         }
     except Exception as e:
-        write_to_summary(f"### ❌ Prisma AIRS Score Trend Failed\n**Error:** Failed to authenticate: {e}")
+        write_to_summary(f"### ❌ Prisma AIRS Dashboard Failed\n**Error:** Failed to authenticate: {e}")
         sys.exit(1)
 
     # 1. Find Target ID from Target Name (Mgmt Plane)
@@ -46,48 +62,79 @@ def main():
     target_obj = next((t for t in existing_targets if t.get("name") == TARGET_NAME), None)
 
     if not target_obj:
-        write_to_summary(f"### ❌ Prisma AIRS Score Trend Failed\n**Error:** Target '{TARGET_NAME}' not found.")
+        write_to_summary(f"### ❌ Prisma AIRS Dashboard Failed\n**Error:** Target '{TARGET_NAME}' not found.")
         print(f"Error: Target '{TARGET_NAME}' not found.")
         sys.exit(1)
 
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
 
-    # 2. Fetch Score Trend (Data Plane)
+    # Base parameters for Data Plane APIs
     params = {
         "target_id": target_id,
         "date_range": DATE_RANGE
     }
 
-    trend_resp = requests.get(f"{DATA_BASE_URL}/dashboard/score-trend", headers=headers, params=params)
+    # 2. Fetch Scan Statistics & Risk Profile
+    stats_json = fetch_data_plane_api(f"{DATA_BASE_URL}/dashboard/scan-statistics", headers, params)
     
-    if not trend_resp.ok:
-        err_summary = (
-            f"### ❌ Prisma AIRS Score Trend Failed\n"
-            f"**HTTP {trend_resp.status_code}**\n\n"
-            f"**URL Attempted:** `{trend_resp.url}`\n"
-            f"**Raw Error Response:**\n```json\n{trend_resp.text}\n```"
-        )
-        write_to_summary(err_summary)
-        print(f"ERROR: HTTP {trend_resp.status_code}")
-        print(f"URL: {trend_resp.url}")
-        print(f"Response: {trend_resp.text}")
-        sys.exit(1)
-
-    trend_json = trend_resp.json()
+    # 3. Fetch Score Trend
+    trend_json = fetch_data_plane_api(f"{DATA_BASE_URL}/dashboard/score-trend", headers, params)
+    
+    # --- Data Extraction ---
+    # Stats
+    total_scans = stats_json.get("total_scans", 0)
+    scan_status_list = stats_json.get("scan_status", [])
+    risk_profile_list = stats_json.get("risk_profile", [])
+    
+    # Trend
     labels = trend_json.get("labels", [])
     series = trend_json.get("series", [])
 
     # --- Build Summary Output ---
     summary_output = [
-        f"## 📈 Prisma AIRS Score Trend: `{TARGET_NAME}`",
+        f"## 📊 Prisma AIRS Target Dashboard: `{TARGET_NAME}`",
         f"**Target ID:** `{target_id}` &nbsp;&nbsp;|&nbsp;&nbsp; **Date Range:** `{DATE_RANGE}`",
         ""
     ]
 
-    # Generate the 3-column table
+    # --- Section A: Overview & Risk Profile ---
+    summary_output.append("### 🛡️ Scan Statistics & Risk Profile")
+    summary_output.append(f"**Total Scans in Period:** `{total_scans}`\n")
+    
+    summary_output.append("<table style='width:100%; border:none;'><tr><td valign='top' style='width:50%;'>")
+    
+    # Scan Status Mini-Table
+    summary_output.append("**Scan Status Breakdown**")
+    summary_output.append("| Status | Count |")
+    summary_output.append("| :--- | :--- |")
+    if scan_status_list:
+        for status in scan_status_list:
+            lbl = status.get("label", "Unknown")
+            val = status.get("value", 0)
+            summary_output.append(f"| {lbl} | **{val}** |")
+    else:
+        summary_output.append("| N/A | 0 |")
+
+    summary_output.append("</td><td valign='top' style='width:50%;'>")
+
+    # Risk Profile Mini-Table
+    summary_output.append("**Risk Profile Breakdown**")
+    summary_output.append("| Risk Level | Count |")
+    summary_output.append("| :--- | :--- |")
+    if risk_profile_list:
+        for risk in risk_profile_list:
+            lbl = risk.get("label", "Unknown")
+            val = risk.get("value", 0)
+            summary_output.append(f"| {lbl} | **{val}** |")
+    else:
+        summary_output.append("| N/A | 0 |")
+
+    summary_output.append("</td></tr></table>\n")
+
+    # --- Section B: Score Trend Data ---
+    summary_output.append("### 📈 Score Trend Data")
     if labels and series:
         table_lines = [
-            "### 📊 Trend Data",
             "| Date | Type | Risk Score |",
             "| :--- | :--- | :--- |"
         ]
@@ -115,15 +162,17 @@ def main():
     
     summary_output.append("")
 
-    # --- Raw API Results (Collapsible) ---
+    # --- Section C: Raw API Results (Collapsible) ---
     summary_output.append("### 📦 Raw API Results")
+    
+    summary_output.append("<details><summary><b>View Raw Scan Statistics JSON</b></summary>\n")
+    summary_output.append("```json\n" + json.dumps(stats_json, indent=2, ensure_ascii=False) + "\n```\n</details>")
+
     summary_output.append("<details><summary><b>View Raw Score Trend JSON</b></summary>\n")
-    summary_output.append("```json")
-    summary_output.append(json.dumps(trend_json, indent=2, ensure_ascii=False))
-    summary_output.append("```\n</details>\n")
+    summary_output.append("```json\n" + json.dumps(trend_json, indent=2, ensure_ascii=False) + "\n```\n</details>\n")
 
     write_to_summary("\n".join(summary_output))
-    print(f"Successfully fetched score trend for {TARGET_NAME} (Range: {DATE_RANGE}).")
+    print(f"Successfully fetched dashboard data for {TARGET_NAME} (Range: {DATE_RANGE}).")
 
 if __name__ == "__main__":
     main()
