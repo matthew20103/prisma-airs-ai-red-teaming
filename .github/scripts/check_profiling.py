@@ -2,6 +2,7 @@ import os
 import requests
 import sys
 import json
+from datetime import datetime
 
 # Environment Variables
 CLIENT_ID = os.environ.get("PRISMA_CLIENT_ID")
@@ -38,6 +39,20 @@ def format_val(v):
         return str(v).replace("\n", "<br>").replace("|", "\\|")
     return "N/A"
 
+def format_timestamp(ts):
+    """Converts unix timestamp to human-readable format."""
+    if not ts or ts == "N/A":
+        return "N/A"
+    try:
+        ts_float = float(ts)
+        # Handle milliseconds (common in APIs)
+        if ts_float > 1e11:
+            ts_float /= 1000
+        return datetime.utcfromtimestamp(ts_float).strftime('%Y-%m-%d %H:%M:%S UTC')
+    except (ValueError, TypeError):
+        # If it is already a string or format is unknown, return as-is
+        return str(ts)
+
 def main():
     try:
         headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
@@ -55,8 +70,10 @@ def main():
         sys.exit(1)
 
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
-    # Fetch Version (Falls back to N/A if it doesn't exist)
-    target_version = target_obj.get("version") or target_obj.get("target_version") or "N/A"
+    
+    # Fetch Version & format timestamp
+    raw_version = target_obj.get("version") or target_obj.get("target_version") or "N/A"
+    target_version = format_timestamp(raw_version)
 
     # Fetch Data
     details_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers)
@@ -86,7 +103,7 @@ def main():
 
     # Field Extraction 
     industry = background.get("industry")
-    use_cases = background.get("use_cases")
+    use_cases = background.get("use_case")
     competitors = background.get("competitors")
     
     # Check context first, fallback to other_details if necessary
@@ -113,7 +130,7 @@ def main():
     summary_output.append("| :--- | :--- | :--- |")
     summary_output.append(f"| **Profiling Status** | {status_emoji} {profiling_status} | {is_ai('status')} |")
     summary_output.append(f"| **Industry** | {format_val(industry)} | {is_ai('industry')} |")
-    summary_output.append(f"| **Use Cases** | {format_val(use_cases)} | {is_ai('use_cases')} |")
+    summary_output.append(f"| **Use Cases** | {format_val(use_cases)} | {is_ai('use_case')} |")
     summary_output.append(f"| **Known Competitors** | {format_val(competitors)} | {is_ai('competitors')} |")
     summary_output.append("")
 
@@ -141,6 +158,21 @@ def main():
             summary_output.append(f"| **{k}** | {format_val(v)} | {is_ai(k)} |")
     else:
         summary_output.append("*No additional 'other_details' found.*")
+    summary_output.append("")
+
+    # --- 4. Raw API Results (Collapsibles) ---
+    summary_output.append("### 📦 Raw API Results")
+    
+    def add_collapsible_json(title, data):
+        summary_output.append(f"<details><summary><b>{title}</b></summary>\n")
+        summary_output.append("```json")
+        summary_output.append(json.dumps(data, indent=2, ensure_ascii=False))
+        summary_output.append("```\n</details>\n")
+
+    add_collapsible_json("Raw Target Background", background)
+    add_collapsible_json("Raw Additional Context", context)
+    add_collapsible_json("Raw Other Details", other_details)
+    add_collapsible_json("Raw AI Generated Fields", ai_fields)
     summary_output.append("")
 
     # Console output for logs
