@@ -48,7 +48,7 @@ def main():
     headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
     
     # Endpoint to list all attacks for the job
-    endpoint = f"/report/{SCAN_TYPE}/{JOB_ID}/attacks"
+    endpoint = f"/report/{SCAN_TYPE}/{JOB_ID}/attack-multi-turn"
     url = f"{DATA_BASE_URL}{endpoint}"
     
     print(f"Fetching attacks from {url} ...")
