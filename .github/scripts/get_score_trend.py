@@ -53,11 +53,11 @@ def main():
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
 
     # 2. Fetch Score Trend (Data Plane)
-    params = {"target_id": target_id}
-    # Only append the date_range parameter if it is not "ALL"
-    if DATE_RANGE != "ALL":
-        params["date_range"] = DATE_RANGE
-        # If the API prefers "time_range" over "date_range", change the key above to "time_range"
+    # Now we ALWAYS pass the date_range parameter
+    params = {
+        "target_id": target_id,
+        "date_range": DATE_RANGE
+    }
 
     trend_resp = requests.get(f"{DATA_BASE_URL}/dashboard/score-trend", headers=headers, params=params)
     
