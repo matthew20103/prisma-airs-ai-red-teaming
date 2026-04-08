@@ -70,8 +70,8 @@ def main():
 
     # Build a Markdown Table
     table_md = [
-        "| Attack ID | Category / Sub-Category | Status | Turns |",
-        "|-----------|-------------------------|--------|-------|"
+        "| Attack ID (Copy this!) | Category / Sub-Category | Severity | Status | Multi-Turn |",
+        "|------------------------|-------------------------|----------|--------|------------|"
     ]
     
     for attack in attacks_list:
@@ -81,15 +81,18 @@ def main():
         # Extract naming
         category = attack.get("category", attack.get("sub_category", "Unknown Category"))
         
+        # Extract severity
+        severity = attack.get("severity", "Unknown")
+
         # Status
         is_successful = attack.get("successful", False)
         status = "❌ Bypassed" if is_successful else "✅ Blocked"
         
-        # Turn count (if available)
-        turns = attack.get("turns", [])
-        turn_count = len(turns) if turns else "Unknown"
+        # Multi-turn check
+        is_multi_turn = attack.get("multi_turn", False)
+        multi_turn_status = "Yes" if is_multi_turn else "No"
 
-        table_md.append(f"| `{(attack_id)}` | {escape_md(category)} | {status} | {turn_count} |")
+        table_md.append(f"| `{(attack_id)}` | {escape_md(category)} | {escape_md(severity)} | {status} | {multi_turn_status} |")
 
     write_to_summary("\n".join(table_md) + "\n")
 
