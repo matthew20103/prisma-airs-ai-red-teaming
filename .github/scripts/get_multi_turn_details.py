@@ -85,27 +85,50 @@ def main():
     write_to_summary(f"### Attack Category: {escape_md(attack_category)}")
     write_to_summary(f"**Goal:** {escape_md(goal)}  <br> **Final Result:** {status}\n")
 
-    # Look for conversation data in 'outputs' first, then fallback to 'turns'
-    conversation_data = attack.get("outputs", attack.get("turns", []))
+    # The API returns a list of lists for 'outputs'. We need to flatten it.
+    raw_conversation_data = attack.get("outputs", attack.get("turns", []))
+    conversation_data = []
+    
+    for item in raw_conversation_data:
+        if isinstance(item, list):
+            # If it's a list (like in your screenshot), extend our flat array
+            conversation_data.extend(item)
+        elif isinstance(item, dict):
+            # Fallback if it's already a dictionary
+            conversation_data.append(item)
     
     if conversation_data:
         table_md = [
-            "| Turn | Attack Prompt | Target AI Response | Status |",
-            "|------|---------------|--------------------|--------|"
+            "| Gen | Turn | Attack Prompt | Target AI Response | Status |",
+            "|-----|------|---------------|--------------------|--------|"
         ]
         
-        for turn_idx, turn in enumerate(conversation_data, start=1):
-            # Extract prompt and response, checking multiple potential key names
-            prompt = escape_md(turn.get("prompt", turn.get("input", "N/A")))
-            resp = escape_md(turn.get("response", turn.get("output", "N/A")))
+        for turn in conversation_data:
+            # Safety check to ensure it's a dictionary
+            if not isinstance(turn, dict):
+                continue
+                
+            gen_num = turn.get("generation", "N/A")
+            turn_num = turn.get("turn", "N/A")
             
-            # Check turn-specific status
-            if "successful" in turn:
-                turn_status = "❌ Bypassed" if turn.get("successful") else "✅ Blocked"
+            # Extract prompt and response using the keys from your screenshot
+            prompt = escape_md(turn.get("prompt", turn.get("input", "N/A")))
+            resp = escape_md(turn.get("output", turn.get("response", "N/A")))
+            
+            # Check turn-specific status (threat field)
+            is_threat = turn.get("threat")
+            if is_threat is True:
+                turn_status = "❌ Bypassed"
+            elif is_threat is False:
+                turn_status = "✅ Blocked"
             else:
-                turn_status = "N/A"
+                # Fallback just in case
+                if "successful" in turn:
+                    turn_status = "❌ Bypassed" if turn.get("successful") else "✅ Blocked"
+                else:
+                    turn_status = "N/A"
 
-            table_md.append(f"| {turn_idx} | {prompt} | {resp} | {turn_status} |")
+            table_md.append(f"| {gen_num} | {turn_num} | {prompt} | {resp} | {turn_status} |")
             
         write_to_summary("\n".join(table_md) + "\n")
     else:
