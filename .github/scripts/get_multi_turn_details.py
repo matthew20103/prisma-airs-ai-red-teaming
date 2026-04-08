@@ -6,13 +6,12 @@ import json
 CLIENT_ID = os.environ.get("PRISMA_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("PRISMA_CLIENT_SECRET")
 TSG_ID = os.environ.get("PRISMA_TSG_ID")
-AGENT_JOB_ID = os.environ.get("AGENT_JOB_ID")
+
+JOB_ID = os.environ.get("JOB_ID")
+ATTACK_ID = os.environ.get("ATTACK_ID")
 
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
 DATA_BASE_URL = "https://api.sase.paloaltonetworks.com/ai-red-teaming/data-plane/v1"
-
-# Endpoint for fetching detailed attacks (adjust if your API doc uses a different path)
-ENDPOINT = f"/report/dynamic/{AGENT_JOB_ID}/attacks"
 
 def write_to_summary(markdown_text):
     """Appends Markdown content to the GitHub Actions Job Summary."""
@@ -34,8 +33,8 @@ def escape_md(text):
     return str(text).replace('\n', '<br>').replace('\r', '').replace('|', '&#124;')
 
 def main():
-    if not AGENT_JOB_ID:
-        error_msg = "No AGENT_JOB_ID provided. Please trigger the workflow with a valid Job ID."
+    if not JOB_ID or not ATTACK_ID:
+        error_msg = "Both JOB_ID and ATTACK_ID must be provided. Please trigger the workflow with valid inputs."
         print(error_msg)
         write_to_summary(f"## ❌ Error\n{error_msg}")
         sys.exit(1)
@@ -49,16 +48,18 @@ def main():
         write_to_summary(f"## ❌ Prisma AIRS Auth Failed\n**Error:** {error_msg}")
         sys.exit(1)
 
-    write_to_summary(f"## 🔬 Multi-Turn Attack Details\n**Dynamic Scan Job ID:** `{AGENT_JOB_ID}`\n")
+    write_to_summary(f"## 🔬 Multi-Turn Attack Details\n**Job ID:** `{JOB_ID}` <br> **Attack ID:** `{ATTACK_ID}`\n")
 
     headers = {
         "Authorization": f"Bearer {access_token}", 
         "Accept": "application/json"
     }
     
-    url = f"{DATA_BASE_URL}{ENDPOINT}"
-    print(f"Fetching multi-turn attack details from {url} ...")
+    # Using the exact endpoint from the official documentation
+    endpoint = f"/report/static/{JOB_ID}/attack-multi-turn/{ATTACK_ID}"
+    url = f"{DATA_BASE_URL}{endpoint}"
     
+    print(f"Fetching multi-turn attack details from {url} ...")
     response = requests.get(url, headers=headers)
     
     if not response.ok:
@@ -67,43 +68,46 @@ def main():
         sys.exit(1)
 
     data = response.json()
-    attacks = data.get("data", []) # Adjust depending on how the API wraps the array (e.g., 'data' or 'attacks')
+    
+    # Assume the API returns a direct object for the attack, or wraps it in 'data'
+    attack = data.get("data", data)
 
-    if not attacks:
-        write_to_summary("✅ **No attack details found** for this job, or the data structure is empty.")
+    if not attack:
+        write_to_summary("✅ **No attack details found** for this specific ID.")
         sys.exit(0)
 
-    # Process and display each attack conversation
-    for index, attack in enumerate(attacks, start=1):
-        attack_category = attack.get("category", "Unknown Category")
-        goal = attack.get("goal", "Unknown Goal")
-        status = "❌ Bypass Successful" if attack.get("successful") else "✅ Blocked/Failed"
-        
-        write_to_summary(f"### Attack {index}: {escape_md(attack_category)}")
-        write_to_summary(f"**Goal:** {escape_md(goal)}  <br> **Result:** {status}\n")
+    # Extract details
+    attack_category = attack.get("category", attack.get("sub_category", "Unknown Category"))
+    goal = attack.get("goal", "Unknown Goal")
+    is_successful = attack.get("successful", False)
+    status = "❌ Bypass Successful" if is_successful else "✅ Blocked/Failed"
+    
+    write_to_summary(f"### Attack Category: {escape_md(attack_category)}")
+    write_to_summary(f"**Goal:** {escape_md(goal)}  <br> **Final Result:** {status}\n")
 
-        turns = attack.get("turns", [])
+    turns = attack.get("turns", [])
+    
+    if turns:
+        table_md = [
+            "| Turn | Prompt (Attacker) | Response (Target AI) | Status |",
+            "|------|-------------------|----------------------|--------|"
+        ]
         
-        if turns:
-            table_md = [
-                "| Turn | Prompt (Attacker) | Response (Target AI) | Status |",
-                "|------|-------------------|----------------------|--------|"
-            ]
+        for turn_idx, turn in enumerate(turns, start=1):
+            prompt = escape_md(turn.get("prompt", ""))
+            resp = escape_md(turn.get("response", ""))
             
-            for turn_idx, turn in enumerate(turns, start=1):
-                prompt = escape_md(turn.get("prompt", ""))
-                resp = escape_md(turn.get("response", ""))
-                
-                # Check turn-specific status if available, else use N/A
-                turn_status = "Bypassed" if turn.get("successful") else "Blocked"
-                if "successful" not in turn:
-                    turn_status = "N/A"
+            # Check turn-specific status
+            if "successful" in turn:
+                turn_status = "❌ Bypassed" if turn.get("successful") else "✅ Blocked"
+            else:
+                turn_status = "N/A"
 
-                table_md.append(f"| {turn_idx} | {prompt} | {resp} | {turn_status} |")
-                
-            write_to_summary("\n".join(table_md) + "\n")
-        else:
-            write_to_summary("> *No turn-by-turn conversation data available for this attack.*\n")
+            table_md.append(f"| {turn_idx} | {prompt} | {resp} | {turn_status} |")
+            
+        write_to_summary("\n".join(table_md) + "\n")
+    else:
+        write_to_summary("> *No turn-by-turn conversation data available for this attack.*\n")
 
     # Add Raw JSON block at the bottom
     write_to_summary(
