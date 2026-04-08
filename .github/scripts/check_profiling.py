@@ -27,6 +27,17 @@ def get_access_token():
     resp.raise_for_status()
     return resp.json().get("access_token")
 
+def format_val(v):
+    """Formats values for Markdown tables, escaping newlines and pipes."""
+    if isinstance(v, list):
+        return ", ".join([str(x).replace("\n", " ").replace("|", "\\|") for x in v]) if v else "None"
+    if isinstance(v, dict):
+        return json.dumps(v).replace("\n", " ").replace("|", "\\|")
+    if v is not None and str(v).strip() != "":
+        # Replace newlines with HTML breaks to keep table intact
+        return str(v).replace("\n", "<br>").replace("|", "\\|")
+    return "N/A"
+
 def main():
     try:
         headers = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json"}
@@ -44,6 +55,8 @@ def main():
         sys.exit(1)
 
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
+    # Fetch Version (Falls back to N/A if it doesn't exist)
+    target_version = target_obj.get("version") or target_obj.get("target_version") or "N/A"
 
     # Fetch Data
     details_resp = requests.get(f"{MGMT_BASE_URL}/target/{target_id}", headers=headers)
@@ -56,58 +69,82 @@ def main():
 
     # Extract Status
     profiling_status = str(prof_data.get("status") or target_data.get("profiling_status", "UNKNOWN")).upper()
+    status_emoji = "✅" if profiling_status == "COMPLETED" else "⏳" if profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"] else "⚠️"
     
-    # Extract Sections - Using .get() with fallback to empty dict
+    # Extract Sections
     other_details = prof_data.get("other_details") or target_data.get("other_details") or {}
     background = prof_data.get("target_background") or target_data.get("target_background") or {}
     context = prof_data.get("additional_context") or target_data.get("additional_context") or {}
 
-    # Table Metrics - Added "or []" to handle cases where the key exists but is null/None
-    competitors = background.get("competitors") or []
-    languages = context.get("languages_supported") or []
-    banned_keywords = context.get("banned_keywords") or []
-    tools = context.get("tools_accessible") or []
+    # AI Generated Fields Extraction
+    ai_fields = prof_data.get("ai_generated_fields", []) or target_data.get("ai_generated_fields", [])
+    if not isinstance(ai_fields, list):
+        ai_fields = []
+        
+    def is_ai(key):
+        return "🤖 Yes" if key in ai_fields else "No"
+
+    # Field Extraction 
+    industry = background.get("industry")
+    use_cases = background.get("use_cases")
+    competitors = background.get("competitors")
+    
+    # Check context first, fallback to other_details if necessary
+    base_model = context.get("base_model") or other_details.get("base_model")
+    core_architecture = context.get("core_architecture") or other_details.get("core_architecture")
+    system_prompt = context.get("system_prompt") or other_details.get("system_prompt")
+    languages = context.get("languages_supported")
+    banned_keywords = context.get("banned_keywords")
+    tools = context.get("tools_accessible")
+
+    # Keys to exclude from the "Other Details" loop so they don't duplicate
+    extracted_keys = ['base_model', 'core_architecture', 'system_prompt']
 
     # --- Build Summary Output ---
     summary_output = [
         f"## 🔍 Prisma AIRS Profiling Report: `{TARGET_NAME}`",
-        f"**Target ID:** `{target_id}`",
+        f"**Target ID:** `{target_id}` &nbsp;&nbsp;|&nbsp;&nbsp; **Target Version:** `{target_version}`",
         ""
     ]
 
-    status_emoji = "✅" if profiling_status == "COMPLETED" else "⏳" if profiling_status in ["PENDING", "IN_PROGRESS", "RUNNING"] else "⚠️"
-
-    # --- 1. Target Profiling Summary Table ---
-    summary_output.append("### 📊 Target Profiling Summary")
-    summary_output.append("| Metric | Value |")
-    summary_output.append("| :--- | :--- |")
-    summary_output.append(f"| **Status** | {status_emoji} {profiling_status} |")
-    summary_output.append(f"| **Competitors** | {len(competitors)} |")
-    summary_output.append(f"| **Languages Supported** | {len(languages)} |")
-    summary_output.append(f"| **Banned Keywords** | {len(banned_keywords)} |")
-    summary_output.append(f"| **Tools Accessible** | {len(tools)} |")
-    summary_output.append(f"| **Target Name** | `{TARGET_NAME}` |")
+    # --- 1. Target Background Table ---
+    summary_output.append("### 📊 Target Background")
+    summary_output.append("| Metric | Value | AI Generated |")
+    summary_output.append("| :--- | :--- | :--- |")
+    summary_output.append(f"| **Profiling Status** | {status_emoji} {profiling_status} | {is_ai('status')} |")
+    summary_output.append(f"| **Industry** | {format_val(industry)} | {is_ai('industry')} |")
+    summary_output.append(f"| **Use Cases** | {format_val(use_cases)} | {is_ai('use_cases')} |")
+    summary_output.append(f"| **Known Competitors** | {format_val(competitors)} | {is_ai('competitors')} |")
     summary_output.append("")
 
-    # --- 2. System Capabilities (Collapsible) ---
+    # --- 2. System Capabilities Table ---
     summary_output.append("### ⚙️ System Capabilities")
-    summary_output.append("<details><summary>View Capabilities JSON</summary>\n")
-    if other_details:
-        summary_output.append("```json\n" + json.dumps(other_details, indent=2, ensure_ascii=False) + "\n```")
-    else:
-        summary_output.append("\n*No 'other_details' object found.*")
-    summary_output.append("</details>\n")
+    summary_output.append("| Metric | Value | AI Generated |")
+    summary_output.append("| :--- | :--- | :--- |")
+    summary_output.append(f"| **Base Model** | {format_val(base_model)} | {is_ai('base_model')} |")
+    summary_output.append(f"| **Core Architecture** | {format_val(core_architecture)} | {is_ai('core_architecture')} |")
+    summary_output.append(f"| **System Prompt** | {format_val(system_prompt)} | {is_ai('system_prompt')} |")
+    summary_output.append(f"| **Languages Supported** | {format_val(languages)} | {is_ai('languages_supported')} |")
+    summary_output.append(f"| **Banned Keywords** | {format_val(banned_keywords)} | {is_ai('banned_keywords')} |")
+    summary_output.append(f"| **Tools Accessible** | {format_val(tools)} | {is_ai('tools_accessible')} |")
+    summary_output.append("")
 
-    # --- 3. Target Context & Background (Collapsible) ---
-    summary_output.append("### 📂 Target Context & Background")
-    summary_output.append("<details><summary>View Context & Background JSON</summary>\n")
-    context_json = json.dumps({"target_background": background, "additional_context": context}, indent=2, ensure_ascii=False)
-    summary_output.append("```json\n" + context_json + "\n```")
-    summary_output.append("</details>")
+    # --- 3. Other Details Table ---
+    summary_output.append("### 📂 Other Details")
+    # Check if there are keys in other_details beyond the ones we already extracted manually
+    if other_details and any(k not in extracted_keys for k in other_details.keys()):
+        summary_output.append("| Key | Value | AI Generated |")
+        summary_output.append("| :--- | :--- | :--- |")
+        for k, v in other_details.items():
+            if k in extracted_keys:
+                continue
+            summary_output.append(f"| **{k}** | {format_val(v)} | {is_ai(k)} |")
+    else:
+        summary_output.append("*No additional 'other_details' found.*")
+    summary_output.append("")
 
     # Console output for logs
     print(f"Current Profiling Status: {profiling_status}")
-    print(context_json)
 
     write_to_summary("\n".join(summary_output))
 
