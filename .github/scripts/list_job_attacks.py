@@ -70,8 +70,8 @@ def main():
 
     # Build a Markdown Table
     table_md = [
-        "| Attack ID (Copy this!) | Category / Sub-Category | Status | Turns |",
-        "|------------------------|-------------------------|--------|-------|"
+        "| Attack ID | Category / Sub-Category | Status | Turns |",
+        "|-----------|-------------------------|--------|-------|"
     ]
     
     for attack in attacks_list:
