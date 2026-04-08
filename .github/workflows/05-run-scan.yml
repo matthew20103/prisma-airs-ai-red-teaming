@@ -1,4 +1,4 @@
-name: 5. Prisma AIRS - Run Red Team Scan
+name: 05. Prisma AIRS - Run Red Team Scan
 
 on:
   workflow_dispatch:
