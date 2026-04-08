@@ -2,7 +2,7 @@ import os
 import requests
 import sys
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # Environment Variables
 CLIENT_ID = os.environ.get("PRISMA_CLIENT_ID")
@@ -40,7 +40,7 @@ def format_val(v):
     return "N/A"
 
 def format_timestamp(ts):
-    """Converts unix timestamp to human-readable format, handling seconds, ms, and μs."""
+    """Converts unix timestamp to human-readable format in HKT (UTC+8)."""
     if not ts or ts == "N/A":
         return "N/A"
     try:
@@ -48,11 +48,13 @@ def format_timestamp(ts):
         # Handle microseconds (16+ digits)
         if ts_float > 1e14:
             ts_float /= 1000000.0
-        # Handle milliseconds (13 digits)
+        # Handle milliseconds (13+ digits)
         elif ts_float > 1e11:
             ts_float /= 1000.0
             
-        return datetime.utcfromtimestamp(ts_float).strftime('%Y-%m-%d %H:%M:%S UTC')
+        # Convert to Hong Kong Time (UTC+8)
+        hkt_tz = timezone(timedelta(hours=8))
+        return datetime.fromtimestamp(ts_float, tz=timezone.utc).astimezone(hkt_tz).strftime('%Y-%m-%d %H:%M:%S HKT')
     except (ValueError, TypeError):
         # If it is already a string or format is unknown, return as-is
         return str(ts)
@@ -97,13 +99,10 @@ def main():
     background = prof_data.get("target_background") or target_data.get("target_background") or {}
     context = prof_data.get("additional_context") or target_data.get("additional_context") or {}
 
-    # AI Generated Fields Extraction
+    # AI Generated Fields Extraction (Kept only for raw collapsibles below)
     ai_fields = prof_data.get("ai_generated_fields", []) or target_data.get("ai_generated_fields", [])
     if not isinstance(ai_fields, list):
         ai_fields = []
-        
-    def is_ai(key):
-        return "🤖 Yes" if key in ai_fields else "No"
 
     # Field Extraction 
     industry = background.get("industry")
@@ -130,36 +129,36 @@ def main():
 
     # --- 1. Target Background Table ---
     summary_output.append("### 📊 Target Background")
-    summary_output.append("| Metric | Value | AI Generated |")
-    summary_output.append("| :--- | :--- | :--- |")
-    summary_output.append(f"| **Profiling Status** | {status_emoji} {profiling_status} | {is_ai('status')} |")
-    summary_output.append(f"| **Industry** | {format_val(industry)} | {is_ai('industry')} |")
-    summary_output.append(f"| **Use Cases** | {format_val(use_cases)} | {is_ai('use_case')} |")
-    summary_output.append(f"| **Known Competitors** | {format_val(competitors)} | {is_ai('competitors')} |")
+    summary_output.append("| Metric | Value |")
+    summary_output.append("| :--- | :--- |")
+    summary_output.append(f"| **Profiling Status** | {status_emoji} {profiling_status} |")
+    summary_output.append(f"| **Industry** | {format_val(industry)} |")
+    summary_output.append(f"| **Use Cases** | {format_val(use_cases)} |")
+    summary_output.append(f"| **Known Competitors** | {format_val(competitors)} |")
     summary_output.append("")
 
     # --- 2. Additional Context Table ---
     summary_output.append("### ⚙️ Additional Context")
-    summary_output.append("| Metric | Value | AI Generated |")
-    summary_output.append("| :--- | :--- | :--- |")
-    summary_output.append(f"| **Base Model** | {format_val(base_model)} | {is_ai('base_model')} |")
-    summary_output.append(f"| **Core Architecture** | {format_val(core_architecture)} | {is_ai('core_architecture')} |")
-    summary_output.append(f"| **System Prompt** | {format_val(system_prompt)} | {is_ai('system_prompt')} |")
-    summary_output.append(f"| **Languages Supported** | {format_val(languages)} | {is_ai('languages_supported')} |")
-    summary_output.append(f"| **Banned Keywords** | {format_val(banned_keywords)} | {is_ai('banned_keywords')} |")
-    summary_output.append(f"| **Tools Accessible** | {format_val(tools)} | {is_ai('tools_accessible')} |")
+    summary_output.append("| Metric | Value |")
+    summary_output.append("| :--- | :--- |")
+    summary_output.append(f"| **Base Model** | {format_val(base_model)} |")
+    summary_output.append(f"| **Core Architecture** | {format_val(core_architecture)} |")
+    summary_output.append(f"| **System Prompt** | {format_val(system_prompt)} |")
+    summary_output.append(f"| **Languages Supported** | {format_val(languages)} |")
+    summary_output.append(f"| **Banned Keywords** | {format_val(banned_keywords)} |")
+    summary_output.append(f"| **Tools Accessible** | {format_val(tools)} |")
     summary_output.append("")
 
     # --- 3. Other Details Table ---
     summary_output.append("### 📂 Other Details")
     # Check if there are keys in other_details beyond the ones we already extracted manually
     if other_details and any(k not in extracted_keys for k in other_details.keys()):
-        summary_output.append("| Key | Value | AI Generated |")
-        summary_output.append("| :--- | :--- | :--- |")
+        summary_output.append("| Key | Value |")
+        summary_output.append("| :--- | :--- |")
         for k, v in other_details.items():
             if k in extracted_keys:
                 continue
-            summary_output.append(f"| **{k}** | {format_val(v)} | {is_ai(k)} |")
+            summary_output.append(f"| **{k}** | {format_val(v)} |")
     else:
         summary_output.append("*No additional 'other_details' found.*")
     summary_output.append("")
