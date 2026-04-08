@@ -11,10 +11,9 @@ on:
         description: 'Date range for the score trend'
         type: choice
         options:
-          - '7d'
-          - '30d'
-          - '90d'
-          - '1y'
+          - 'LAST_7_DAYS'
+          - 'LAST_15_DAYS'
+          - 'LAST_30_DAYS'
           - 'ALL'
         default: 'ALL'
         required: true
