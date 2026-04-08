@@ -1,4 +1,4 @@
-name: 6. Prisma AIRS - List Scan Jobs
+name: 06. Prisma AIRS - List Scan Jobs
 
 on:
   workflow_dispatch:
