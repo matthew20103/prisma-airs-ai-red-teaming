@@ -7,6 +7,17 @@ on:
         description: 'Name of the Target to retrieve score trend for'
         type: string
         required: true
+      date_range:
+        description: 'Date range for the score trend'
+        type: choice
+        options:
+          - '7d'
+          - '30d'
+          - '90d'
+          - '1y'
+          - 'ALL'
+        default: 'ALL'
+        required: true
 
 jobs:
   get-score-trend:
@@ -29,4 +40,5 @@ jobs:
           PRISMA_CLIENT_SECRET: "${{ secrets.PRISMA_CLIENT_SECRET }}"
           PRISMA_TSG_ID: "${{ secrets.PRISMA_TSG_ID }}"
           TARGET_NAME: "${{ inputs.target_name }}"
+          DATE_RANGE: "${{ inputs.date_range }}"
         run: python .github/scripts/get_score_trend.py
