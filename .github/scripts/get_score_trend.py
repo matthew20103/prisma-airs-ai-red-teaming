@@ -8,6 +8,7 @@ CLIENT_ID = os.environ.get("PRISMA_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("PRISMA_CLIENT_SECRET")
 TSG_ID = os.environ.get("PRISMA_TSG_ID")
 TARGET_NAME = os.environ.get("TARGET_NAME")
+DATE_RANGE = os.environ.get("DATE_RANGE", "ALL")
 
 # API Endpoints
 AUTH_URL = "https://auth.apps.paloaltonetworks.com/oauth2/access_token"
@@ -51,8 +52,13 @@ def main():
 
     target_id = target_obj.get("uuid") or target_obj.get("target_id") or target_obj.get("id")
 
-    # 2. Fetch Score Trend (Data Plane) -> Note the hyphen in 'score-trend'
+    # 2. Fetch Score Trend (Data Plane)
     params = {"target_id": target_id}
+    # Only append the date_range parameter if it is not "ALL"
+    if DATE_RANGE != "ALL":
+        params["date_range"] = DATE_RANGE
+        # If the API prefers "time_range" over "date_range", change the key above to "time_range"
+
     trend_resp = requests.get(f"{DATA_BASE_URL}/dashboard/score-trend", headers=headers, params=params)
     
     if not trend_resp.ok:
@@ -75,7 +81,7 @@ def main():
     # --- Build Summary Output ---
     summary_output = [
         f"## 📈 Prisma AIRS Score Trend: `{TARGET_NAME}`",
-        f"**Target ID:** `{target_id}`",
+        f"**Target ID:** `{target_id}` &nbsp;&nbsp;|&nbsp;&nbsp; **Date Range:** `{DATE_RANGE}`",
         ""
     ]
 
@@ -101,7 +107,7 @@ def main():
             
             summary_output.append("| " + " | ".join(row_data) + " |")
     else:
-        summary_output.append("*No score trend data available for this target yet.*")
+        summary_output.append("*No score trend data available for this target in the selected date range.*")
     
     summary_output.append("")
 
@@ -113,7 +119,7 @@ def main():
     summary_output.append("```\n</details>\n")
 
     write_to_summary("\n".join(summary_output))
-    print(f"Successfully fetched score trend for {TARGET_NAME}.")
+    print(f"Successfully fetched score trend for {TARGET_NAME} (Range: {DATE_RANGE}).")
 
 if __name__ == "__main__":
     main()
