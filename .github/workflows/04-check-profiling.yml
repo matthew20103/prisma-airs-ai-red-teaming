@@ -1,4 +1,4 @@
-name: 4. Prisma AIRS - Check Profiling Status
+name: 04. Prisma AIRS - Check Profiling Status
 
 on:
   workflow_dispatch:
