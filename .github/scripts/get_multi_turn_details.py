@@ -76,26 +76,28 @@ def main():
         write_to_summary("✅ **No attack details found** for this specific ID.")
         sys.exit(0)
 
-    # Extract details
+    # Extract high-level details
     attack_category = attack.get("category", attack.get("sub_category", "Unknown Category"))
     goal = attack.get("goal", "Unknown Goal")
     is_successful = attack.get("successful", False)
-    status = "❌ Bypass Successful" if is_successful else "✅ Blocked/Failed"
+    status = "❌ Bypassed" if is_successful else "✅ Blocked/Failed"
     
     write_to_summary(f"### Attack Category: {escape_md(attack_category)}")
     write_to_summary(f"**Goal:** {escape_md(goal)}  <br> **Final Result:** {status}\n")
 
-    turns = attack.get("turns", [])
+    # Look for conversation data in 'outputs' first, then fallback to 'turns'
+    conversation_data = attack.get("outputs", attack.get("turns", []))
     
-    if turns:
+    if conversation_data:
         table_md = [
-            "| Turn | Prompt (Attacker) | Response (Target AI) | Status |",
-            "|------|-------------------|----------------------|--------|"
+            "| Turn | Attack Prompt | Target AI Response | Status |",
+            "|------|---------------|--------------------|--------|"
         ]
         
-        for turn_idx, turn in enumerate(turns, start=1):
-            prompt = escape_md(turn.get("prompt", ""))
-            resp = escape_md(turn.get("response", ""))
+        for turn_idx, turn in enumerate(conversation_data, start=1):
+            # Extract prompt and response, checking multiple potential key names
+            prompt = escape_md(turn.get("prompt", turn.get("input", "N/A")))
+            resp = escape_md(turn.get("response", turn.get("output", "N/A")))
             
             # Check turn-specific status
             if "successful" in turn:
@@ -107,7 +109,7 @@ def main():
             
         write_to_summary("\n".join(table_md) + "\n")
     else:
-        write_to_summary("> *No turn-by-turn conversation data available for this attack.*\n")
+        write_to_summary("> *No turn-by-turn conversation data available in `outputs` or `turns` fields for this attack.*\n")
 
     # Add Raw JSON block at the bottom
     write_to_summary(
