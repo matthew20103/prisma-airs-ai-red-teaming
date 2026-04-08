@@ -106,25 +106,44 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
     # --- RENDER VISUALIZATIONS ---
 
     if report_data:
-        # Pie Chart Generation
+        # Pie Chart Generation with Custom Colors
         severity_report = report_data.get("severity_report", {})
         if severity_report:
             severity_stats = severity_report.get("stats", [])
             total_successful = severity_report.get("successful", 0)
             
-            if severity_stats:
+            # Map for Mermaid Colors and Sorting Order
+            severity_colors = {
+                "CRITICAL": "#8B0000",   # Dark Red
+                "HIGH": "#FF0000",       # Red
+                "MEDIUM": "#FFA500",     # Orange
+                "LOW": "#FFFF00",        # Yellow
+                "INFORMATIONAL": "#ADD8E6" # Light Blue
+            }
+            severity_order = {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 3, "LOW": 4, "INFORMATIONAL": 5}
+            
+            # Filter valid stats and sort them by severity to ensure consistent coloring
+            valid_stats = [stat for stat in severity_stats if stat.get("successful", 0) > 0]
+            valid_stats.sort(key=lambda x: severity_order.get(str(x.get("severity")).upper(), 99))
+            
+            if valid_stats:
+                # Generate dynamic theme config based on the data present
+                pie_colors = [severity_colors.get(str(stat.get("severity")).upper(), "#808080") for stat in valid_stats]
+                theme_vars = ", ".join([f"'pie{i+1}': '{color}'" for i, color in enumerate(pie_colors)])
+                init_directive = f"%%{{init: {{'theme': 'base', 'themeVariables': {{{theme_vars}}}}}}}%%"
+
                 mermaid_chart = [
                     "#### 🎯 Successful Attacks by Severity",
                     f"**Total Successful Attacks:** {total_successful}\n",
                     "```mermaid",
+                    init_directive,
                     "pie title Severity of Successful Attacks"
                 ]
                 
-                for stat in severity_stats:
-                    severity = stat.get("severity", "UNKNOWN")
+                for stat in valid_stats:
+                    severity = str(stat.get("severity")).upper()
                     successful_count = stat.get("successful", 0)
-                    if successful_count > 0:
-                        mermaid_chart.append(f'    "{severity} ({successful_count})" : {successful_count}')
+                    mermaid_chart.append(f'    "{severity} ({successful_count})" : {successful_count}')
                 
                 mermaid_chart.append("```\n")
                 write_to_summary("\n".join(mermaid_chart))
@@ -154,14 +173,8 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
             table_md.append("\n")
             write_to_summary("\n".join(table_md))
 
-        # --- ALWAYS RENDER: OWASP Top 10 Compliance Table (Static Scan) ---
+        # --- OWASP Top 10 Compliance Section (Static Scan) ---
         if scan_type == "static":
-            owasp_table = [
-                "#### 📜 OWASP Top 10 for LLMs Compliance",
-                "| Category | Total Attacks | Successful Attacks | Status |",
-                "|----------|---------------|--------------------|--------|"
-            ]
-            
             compliance_report = report_data.get("compliance_report")
             
             # Check if we have valid compliance data to parse
@@ -174,6 +187,12 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
                 # Fallback: If no explicit "OWASP" string is found in the display names, use all compliance categories
                 display_cats = owasp_categories if owasp_categories else compliance_sub_cats
                 
+                owasp_table = [
+                    "#### 📜 OWASP Top 10 for LLMs Compliance",
+                    "| Category | Total Attacks | Successful Attacks | Status |",
+                    "|----------|---------------|--------------------|--------|"
+                ]
+                
                 for cat in display_cats:
                     name = cat.get("display_name", "Unknown")
                     total = cat.get("total", 0)
@@ -182,12 +201,12 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
                     status = "✅ Pass" if successful == 0 else "❌ Fail"
                     
                     owasp_table.append(f"| {escape_md_table(name)} | {total} | {successful} | {status} |")
+                
+                owasp_table.append("\n")
+                write_to_summary("\n".join(owasp_table))
             else:
-                # Fallback row if compliance_report is empty or null, ensuring the table always appears
-                owasp_table.append("| No specific OWASP compliance vulnerabilities found | 0 | 0 | ✅ Pass |")
-            
-            owasp_table.append("\n")
-            write_to_summary("\n".join(owasp_table))
+                # Instead of a table, just show a text message if no compliance data exists
+                write_to_summary("#### 📜 OWASP Top 10 for LLMs Compliance\nNo specific OWASP compliance vulnerabilities found.\n")
 
     # --- TABLES ---
 
