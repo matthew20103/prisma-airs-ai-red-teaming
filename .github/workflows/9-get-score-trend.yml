@@ -1,14 +1,14 @@
-name: 9. Prisma AIRS - Scan Stats & Score Trend
+name: 9. Prisma AIRS - Get Score Trend
 
 on:
   workflow_dispatch:
     inputs:
       target_name:
-        description: 'Name of the Target'
+        description: 'Name of the Target to retrieve score trend for'
         type: string
         required: true
       date_range:
-        description: 'Date range for the dashboard data'
+        description: 'Date range for the score trend'
         type: choice
         options:
           - 'LAST_7_DAYS'
@@ -19,7 +19,7 @@ on:
         required: true
 
 jobs:
-  get-target-dashboard:
+  get-score-trend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -33,7 +33,7 @@ jobs:
       - name: Install Dependencies
         run: pip install requests
         
-      - name: Fetch Target Stats and Trend
+      - name: Fetch Target Score Trend
         env:
           PRISMA_CLIENT_ID: "${{ secrets.PRISMA_CLIENT_ID }}"
           PRISMA_CLIENT_SECRET: "${{ secrets.PRISMA_CLIENT_SECRET }}"
