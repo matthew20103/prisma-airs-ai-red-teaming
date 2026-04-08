@@ -1,0 +1,43 @@
+name: 11. Prisma AIRS - List Job Attacks
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: 'Job ID to list attacks for'
+        required: true
+        type: string
+      scan_type:
+        description: 'Type of scan (static or dynamic)'
+        required: true
+        type: choice
+        options:
+          - static
+          - dynamic
+
+jobs:
+  list-attacks:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: List Job Attacks
+        env:
+          PRISMA_CLIENT_ID: ${{ secrets.PRISMA_CLIENT_ID }}
+          PRISMA_CLIENT_SECRET: ${{ secrets.PRISMA_CLIENT_SECRET }}
+          PRISMA_TSG_ID: ${{ secrets.PRISMA_TSG_ID }}
+          JOB_ID: ${{ github.event.inputs.job_id }}
+          SCAN_TYPE: ${{ github.event.inputs.scan_type }}
+        run: python .github/scripts/list_job_attacks.py
