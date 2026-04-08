@@ -1,4 +1,4 @@
-name: 9. Prisma AIRS - Get Score Trend
+name: 09. Prisma AIRS - Get Score Trend
 
 on:
   workflow_dispatch:
