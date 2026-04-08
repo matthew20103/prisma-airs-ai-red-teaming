@@ -47,8 +47,8 @@ def main():
 
     headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
     
-    # Endpoint to list all attacks for the job
-    endpoint = f"/report/{SCAN_TYPE}/{JOB_ID}/attack-multi-turn"
+    # Using the exact endpoint from the official documentation, adding limit=100
+    endpoint = f"/report/{SCAN_TYPE}/{JOB_ID}/list-attacks?limit=100"
     url = f"{DATA_BASE_URL}{endpoint}"
     
     print(f"Fetching attacks from {url} ...")
@@ -76,7 +76,7 @@ def main():
     
     for attack in attacks_list:
         # Extract the ID
-        attack_id = attack.get("id", attack.get("attack_id", "UNKNOWN_ID"))
+        attack_id = attack.get("id", attack.get("attack_id", attack.get("uuid", "UNKNOWN_ID")))
         
         # Extract naming
         category = attack.get("category", attack.get("sub_category", "Unknown Category"))
