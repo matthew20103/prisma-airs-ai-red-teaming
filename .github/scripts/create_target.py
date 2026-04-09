@@ -29,7 +29,6 @@ def parse_text_env(var_name, default=None):
     if not val:
         return default
         
-    # --- Intercept explicit exclusion keywords to skip the field ---
     if val.upper() in ['NONE', 'NA', 'N/A', 'NULL', '-']:
         return None
         
@@ -41,7 +40,6 @@ def parse_json_env(var_name, default=None):
     if not val:
         return default
     
-    # --- Intercept explicit exclusion keywords to skip the field ---
     if val.upper() in ['NONE', 'NA', 'N/A', 'NULL', '-', '{}']:
         return None
         
@@ -67,9 +65,7 @@ def main():
 
     session_supported = os.environ.get("SESSION_SUPPORTED", "false").lower() == "true"
     
-    # --- Extract the Response Key dynamically ---
     resp_json = parse_json_env("RESPONSE_JSON", {"reply": "{RESPONSE}"})
-    # This grabs the first key from the dictionary (e.g., "output" from {"output": "{RESPONSE}"})
     response_key = next(iter(resp_json.keys()), "reply") if resp_json else "reply"
 
     # 1. Base Variables
@@ -96,21 +92,23 @@ def main():
     if description:
         target_payload["description"] = description
 
+    # FIX: Move network broker ID inside connection_params
     nb_uuid = parse_text_env("NB_CHANNEL_UUID")
     if nb_uuid and target_payload["api_endpoint_type"] == "NETWORK_BROKER":
-        target_payload["network_broker_channel_uuid"] = nb_uuid
+        # Check standard API specs, usually it is network_broker_id
+        target_payload["connection_params"]["network_broker_id"] = nb_uuid
 
     req_headers = parse_json_env("REQUEST_HEADERS")
     if req_headers:
         target_payload["connection_params"]["request_headers"] = req_headers
 
-    # 3. STRICT SCHEMA FIX: Only add multi_turn config if session_supported is True
+    # 3. Multi-turn config
     if session_supported:
         mt_config = parse_json_env("MULTI_TURN_CONFIG")
         if mt_config and "type" in mt_config:
             target_payload["multi_turn_config"] = mt_config
 
-    # 4. STRICT SCHEMA FIX: Only add rate_limit integer if rate_limit_enabled is True
+    # 4. Target Metadata
     rate_limit_enabled = os.environ.get("RATE_LIMIT_ENABLED", "false").lower() == "true"
     target_payload["target_metadata"] = {
         "rate_limit_enabled": rate_limit_enabled
@@ -119,12 +117,12 @@ def main():
         target_rate_limit = os.environ.get("TARGET_RATE_LIMIT", "100").strip()
         target_payload["target_metadata"]["rate_limit"] = int(target_rate_limit) if target_rate_limit.isdigit() else 100
 
-    # 5. Context blocks
-    target_bg = parse_text_env("TARGET_BACKGROUND")
+    # 5. FIX: Parse Context blocks as JSON, not Strings
+    target_bg = parse_json_env("TARGET_BACKGROUND")
     if target_bg:
         target_payload["target_background"] = target_bg
 
-    add_context = parse_text_env("ADDITIONAL_CONTEXT")
+    add_context = parse_json_env("ADDITIONAL_CONTEXT")
     if add_context:
         target_payload["additional_context"] = add_context
 
@@ -139,10 +137,7 @@ def main():
     existing_targets = list_resp.json().get("data", [])
     target_id = next((t.get("id") for t in existing_targets if t.get("name") == target_name), None)
     
-    # Track whether we are updating or creating for the summary
     is_update = bool(target_id)
-
-    # STRICT VALIDATION IS ON!
     query_params = {"validate": "true"}
 
     print("\n--- DEBUG: Smart Payload being sent to Prisma AIRS ---")
@@ -163,13 +158,11 @@ def main():
             print("[!] Check the DEBUG payload above to ensure your schema and authentication headers are correct.")
         sys.exit(1)
         
-    # Extract the ID cleanly (API returns it as "uuid" or "id")
     target_id = target_id or resp.json().get("uuid") or resp.json().get("id")
     print(f"\n✅ Target is successfully registered and validated! ID: {target_id}")
     print("✅ Profiling has been automatically triggered by Prisma AIRS in the background.")
     print("Use the 'Check Profiling Status' workflow to see the results later!")
 
-    # --- Write Beautiful Summary to GitHub UI ---
     action_text = "Updated" if is_update else "Created"
     api_endpoint = target_payload.get("connection_params", {}).get("api_endpoint", "N/A")
     target_type = target_payload.get("target_type", "N/A")
