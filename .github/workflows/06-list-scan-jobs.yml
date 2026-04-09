@@ -7,7 +7,6 @@ on:
         description: 'Name of the Prisma AIRS Target'
         required: true
         type: string
-        default: 'my-ai-app-production'
 
 jobs:
   list-jobs:
