@@ -7,7 +7,7 @@ on:
         description: 'Name of the Target to retrieve'
         type: string
         required: true
-        default: 'Deepseek Chat Test'
+        default: ''
 
 jobs:
   get-target:
