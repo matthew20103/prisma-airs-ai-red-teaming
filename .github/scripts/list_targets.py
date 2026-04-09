@@ -30,40 +30,41 @@ def main():
         print(f"Authentication failed: {e}")
         sys.exit(1)
 
-    # --- 1. Fetch and Print Network Channels ---
-    print("\nFetching all registered Network Channels...\n")
+    # --- 1. Fetch and Print Network Brokers ---
+    print("\nFetching all registered Network Brokers...\n")
     
-    # Note: Using standard Prisma AIRS REST convention. 
-    channels_resp = requests.get(f"{MGMT_BASE_URL}/network-channel", headers=headers)
+    # Updated to the network-broker endpoint
+    brokers_resp = requests.get(f"{MGMT_BASE_URL}/network-broker", headers=headers)
     
-    if channels_resp.ok:
-        channels = channels_resp.json().get("data", [])
-        write_summary("## 🌐 Prisma AIRS Network Channels")
+    if brokers_resp.ok:
+        brokers = brokers_resp.json().get("data", [])
+        write_summary("## 🌐 Prisma AIRS Network Brokers")
         
-        if not channels:
-            print("No Network Channels found in this TSG.")
-            write_summary("No Network Channels found in this TSG.\n\n---\n")
+        if not brokers:
+            print("No Network Brokers found in this TSG.")
+            write_summary("No Network Brokers found in this TSG.\n\n---\n")
         else:
-            print(f"{'CHANNEL NAME':<35} | {'STATUS':<15} | {'UUID'}")
+            print(f"{'BROKER NAME':<35} | {'STATUS':<15} | {'UUID'}")
             print("-" * 90)
-            write_summary("| Channel Name | Status | UUID |")
+            write_summary("| Broker Name | Status | UUID |")
             write_summary("|---|---|---|")
             
-            for c in channels:
-                name = c.get("name", "Unknown")[:34]
-                full_name = c.get("name", "Unknown")
-                status = c.get("status", "N/A")  # Displays "Online", "Offline", etc.
-                uuid = c.get("uuid") or c.get("id") or "N/A"
+            for b in brokers:
+                name = b.get("name", "Unknown")[:34]
+                full_name = b.get("name", "Unknown")
+                status = b.get("status", "N/A")  # Usually "Online", "Offline", "Active", etc.
+                uuid = b.get("uuid") or b.get("id") or "N/A"
                 
                 print(f"{name:<35} | {status:<15} | {uuid}")
                 write_summary(f"| `{full_name}` | `{status}` | `{uuid}` |")
             
             print("-" * 90)
-            print(f"Total Channels: {len(channels)}\n")
-            write_summary(f"\n**Total Channels:** `{len(channels)}`\n\n---\n")
+            print(f"Total Brokers: {len(brokers)}\n")
+            write_summary(f"\n**Total Brokers:** `{len(brokers)}`\n\n---\n")
     else:
-        print(f"Failed to list network channels: {channels_resp.text}\n")
-        # We don't exit here so the script can still attempt to fetch targets
+        print(f"Failed to list network brokers. Status: {brokers_resp.status_code}")
+        print(f"Raw Response: {brokers_resp.text}\n")
+        # Script continues so it can still fetch targets
 
     # --- 2. Fetch and Print Targets ---
     print("Fetching all registered targets...\n")
