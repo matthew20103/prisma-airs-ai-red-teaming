@@ -92,11 +92,10 @@ def main():
     if description:
         target_payload["description"] = description
 
-    # FIX: Move network broker ID inside connection_params
+    # FIX: Moved the network broker UUID back to the root level where it belongs!
     nb_uuid = parse_text_env("NB_CHANNEL_UUID")
     if nb_uuid and target_payload["api_endpoint_type"] == "NETWORK_BROKER":
-        # Check standard API specs, usually it is network_broker_id
-        target_payload["connection_params"]["network_broker_id"] = nb_uuid
+        target_payload["network_broker_channel_uuid"] = nb_uuid
 
     req_headers = parse_json_env("REQUEST_HEADERS")
     if req_headers:
@@ -117,7 +116,7 @@ def main():
         target_rate_limit = os.environ.get("TARGET_RATE_LIMIT", "100").strip()
         target_payload["target_metadata"]["rate_limit"] = int(target_rate_limit) if target_rate_limit.isdigit() else 100
 
-    # 5. FIX: Parse Context blocks as JSON, not Strings
+    # 5. Context blocks (Now correctly parsed as JSON)
     target_bg = parse_json_env("TARGET_BACKGROUND")
     if target_bg:
         target_payload["target_background"] = target_bg
