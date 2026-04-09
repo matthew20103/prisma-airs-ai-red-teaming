@@ -114,8 +114,8 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
             
             # Map for Mermaid Colors and Sorting Order
             severity_colors = {
-                "CRITICAL": "#8B0000",   # Dark Red
-                "HIGH": "#FF0000",       # Red
+                "CRITICAL": "#FF0000",   # Dark Red
+                "HIGH": "#8B0000",       # Red
                 "MEDIUM": "#FFA500",     # Orange
                 "LOW": "#FFFF00",        # Yellow
                 "INFORMATIONAL": "#ADD8E6" # Light Blue
