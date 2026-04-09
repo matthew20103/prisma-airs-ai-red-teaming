@@ -7,7 +7,6 @@ on:
         description: 'Name of the Target to retrieve'
         type: string
         required: true
-        default: ''
 
 jobs:
   get-target:
