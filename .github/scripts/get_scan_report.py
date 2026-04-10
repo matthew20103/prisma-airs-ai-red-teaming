@@ -152,8 +152,18 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
         all_sub_categories = []
         for report_key in ["security_report", "safety_report", "brand_report", "compliance_report"]:
             rep = report_data.get(report_key)
-            if rep and isinstance(rep, dict):
-                sub_cats = rep.get("sub_categories", [])
+            # The compliance_report is a list now, handle it safely for the distribution table if needed
+            if rep:
+                if isinstance(rep, dict):
+                    sub_cats = rep.get("sub_categories", [])
+                elif isinstance(rep, list):
+                    # Extract sub_categories/techniques if rep is a list (like the new compliance format)
+                    sub_cats = []
+                    for item in rep:
+                        sub_cats.extend(item.get("sub_categories", []) or item.get("techniques", []))
+                else:
+                    sub_cats = []
+
                 if sub_cats:
                     for sc in sub_cats:
                         name = sc.get("display_name", "Unknown")
@@ -175,17 +185,20 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
 
         # --- OWASP Top 10 Compliance Section (Static Scan) ---
         if scan_type == "static":
-            compliance_report = report_data.get("compliance_report")
+            compliance_report_list = report_data.get("compliance_report", [])
             
-            # Check if we have valid compliance data to parse
-            if compliance_report and isinstance(compliance_report, dict) and compliance_report.get("sub_categories"):
-                compliance_sub_cats = compliance_report.get("sub_categories", [])
-                
-                # Attempt to filter for OWASP categories explicitly
-                owasp_categories = [c for c in compliance_sub_cats if "owasp" in c.get("display_name", "").lower()]
-                
-                # Fallback: If no explicit "OWASP" string is found in the display names, use all compliance categories
-                display_cats = owasp_categories if owasp_categories else compliance_sub_cats
+            # Find the OWASP report object inside the list
+            owasp_report = None
+            if isinstance(compliance_report_list, list):
+                for report in compliance_report_list:
+                    # Look for the dictionary related to OWASP
+                    if "owasp" in report.get("id", "").lower() or "owasp" in report.get("display_name", "").lower():
+                        owasp_report = report
+                        break
+            
+            # Check if we found the OWASP data and if it has 'techniques'
+            if owasp_report and owasp_report.get("techniques"):
+                techniques = owasp_report.get("techniques", [])
                 
                 owasp_table = [
                     "#### 📜 OWASP Top 10 for LLMs Compliance",
@@ -193,10 +206,15 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
                     "|----------|---------------|--------------------|--------|"
                 ]
                 
-                for cat in display_cats:
-                    name = cat.get("display_name", "Unknown")
-                    total = cat.get("total", 0)
-                    successful = cat.get("successful", 0)
+                for tech in techniques:
+                    # Combine ID and Description for better readability in the table
+                    display_name = tech.get("display_name", "Unknown")
+                    description = tech.get("description", "")
+                    name = f"{display_name}: {description}" if description else display_name
+                    
+                    total = tech.get("total", 0)
+                    successful = tech.get("successful", 0)
+                    
                     # Determine pass/fail based on whether any attacks bypassed defenses
                     status = "✅ Pass" if successful == 0 else "❌ Fail"
                     
@@ -205,7 +223,7 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
                 owasp_table.append("\n")
                 write_to_summary("\n".join(owasp_table))
             else:
-                # Instead of a table, just show a text message if no compliance data exists
+                # Show a text message if no compliance data exists
                 write_to_summary("#### 📜 OWASP Top 10 for LLMs Compliance\nNo specific OWASP compliance vulnerabilities found.\n")
 
     # --- TABLES ---
