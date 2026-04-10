@@ -150,20 +150,11 @@ def fetch_full_report_suite(job_id, base_endpoint, title, scan_type):
 
         # Successful Attacks Distribution Table
         all_sub_categories = []
-        for report_key in ["security_report", "safety_report", "brand_report", "compliance_report"]:
+        # Restricted loop to ONLY security_report and safety_report
+        for report_key in ["security_report", "safety_report"]:
             rep = report_data.get(report_key)
-            # The compliance_report is a list now, handle it safely for the distribution table if needed
-            if rep:
-                if isinstance(rep, dict):
-                    sub_cats = rep.get("sub_categories", [])
-                elif isinstance(rep, list):
-                    # Extract sub_categories/techniques if rep is a list (like the new compliance format)
-                    sub_cats = []
-                    for item in rep:
-                        sub_cats.extend(item.get("sub_categories", []) or item.get("techniques", []))
-                else:
-                    sub_cats = []
-
+            if rep and isinstance(rep, dict):
+                sub_cats = rep.get("sub_categories", [])
                 if sub_cats:
                     for sc in sub_cats:
                         name = sc.get("display_name", "Unknown")
